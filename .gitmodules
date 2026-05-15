@@ -1,0 +1,3 @@
+[submodule "thirdparty/Polymarket-BTC-15-Minute-Trading-Bot"]
+	path = thirdparty/Polymarket-BTC-15-Minute-Trading-Bot
+	url = https://github.com/aulekator/Polymarket-BTC-15-Minute-Trading-Bot.git
