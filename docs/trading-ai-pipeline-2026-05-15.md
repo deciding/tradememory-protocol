@@ -126,7 +126,158 @@ asyncio.run(remember_trade(
 
 ## 2. Work in Progress
 
-### 2.1 Binance Trade Test Cases
+### 2.1 Polymarket BTC 15-Minute Trading Bot
+
+Submodule added at `thirdparty/Polymarket-BTC-15-Minute-Trading-Bot`.
+
+#### Architecture
+- **Nautilus Trader** as the core trading engine (with Polymarket adapter)
+- **6 signal processors** feeding a fusion engine:
+  - SpikeDetection — probability deviation from 20-period MA
+  - SentimentProcessor — Fear & Greed index integration
+  - PriceDivergence — BTC spot vs Polymarket price divergence
+  - OrderBookImbalance — CLOB order book skew detection
+  - TickVelocity — 30s/60s price momentum in probability space
+  - DeribitPCR — institutional options sentiment (Put/Call Ratio)
+- **Risk engine** — $1 fixed position size, max exposure limits
+- **Learning engine** — adapts fusion weights based on win rate
+- **Paper trading** — `paper_trades.json` output with simulated P&L
+- **Grafana exporter** — live metrics dashboard
+
+#### Trade logic
+- Triggers at **minute 13–14** of each 15-min Polymarket interval (minutes 780–840)
+- Trend filter: price > 0.60 → buy YES; price < 0.40 → buy NO; 0.40–0.60 → skip
+- Trades once per sub-interval using market start timestamp as key
+
+#### Running the bot
+```bash
+cd thirdparty/Polymarket-BTC-15-Minute-Trading-Bot
+python test.py                          # Test Gamma API connectivity
+python 15m_bot_runner.py                # Paper trade (simulation mode)
+python 15m_bot_runner.py --live         # Live trading (real money)
+python view_paper_trades.py              # View simulation results
+```
+
+#### Integration point with TradeMemory
+After each paper or live trade, the outcome should be stored in TradeMemory:
+```python
+from tradememory.mcp_server import remember_trade
+import asyncio
+
+asyncio.run(remember_trade(
+    trade_id=f"POLY-{market_slug}-{sub_interval}",
+    symbol="BTC-USD-15m",
+    direction="long" if direction == "long" else "short",
+    lot_size=1.0,          # $1 fixed
+    strategy="polymarket-trend-filter",
+    confidence=price_float,  # price = confidence proxy
+    reasoning=f"Late-window trade at {price_float:.2%}, signal_score={signal.score}",
+    market_context={
+        "price": float(current_price),
+        "sub_interval": sub_interval,
+        "market_slug": market_slug,
+        "fusion_score": fused.score,
+        "fusion_confidence": fused.confidence,
+    },
+    outcome={
+        "exit_price": float(exit_price),
+        "pnl": float(pnl),
+        "outcome": outcome,
+    },
+))
+```
+
+---
+
+### 2.2 Polymarket + TradeMemory Test Plan
+
+**Objective:** Validate the full pipeline — Polymarket BTC bot trades → TradeMemory records + recalls → OWM patterns surface.
+
+#### Phase A: Unit Tests (no real money)
+
+**A1. Signal Processor Isolation**
+- Feed synthetic price series to each processor (SpikeDetection, TickVelocity, etc.)
+- Verify signal output format matches `TradingSignal` schema
+- Verify fusion engine weight application
+
+**A2. Paper Trade → TradeMemory Integration**
+- Run bot in paper-trading mode (`test_mode=True`, trades every 1 min)
+- After each paper trade, call `remember_trade()` with full context
+- Assert: trade appears in DB, all 5 memory layers written
+- Assert: `get_strategy_performance(strategy="polymarket-trend-filter")` returns updated stats
+
+**A3. OWM Recall from Polymarket Trades**
+- Record 20+ paper trades across different market conditions
+- Call `recall_memories(current_context)` with a new hypothetical context
+- Assert: returns relevant past trades weighted by OWM scoring
+- Assert: context drift detection fires when market regime changes
+
+**A4. Reflection Engine on Polymarket Data**
+- Call `run_daily_reflection()` with 20 paper trades
+- Assert: returns pattern insights (e.g., "win rate higher when price > 0.65")
+- Assert: adjustment recommendations are actionable
+
+#### Phase B: Integration Tests (no real money)
+
+**B1. End-to-End Paper Pipeline**
+- `test.py` → verify Gamma API returns BTC 15-min markets
+- `bot.py` (paper mode) → 50 paper trades
+- `view_paper_trades.py` → verify win rate, P&L
+- `remember_trade()` → all 50 trades in TradeMemory DB
+- `recall_memories()` → verify recall relevance scoring > 0.5
+- `get_strategy_performance()` → verify metrics match paper trades
+
+**B2. Market Switch Resilience**
+- Let bot cycle through multiple markets (wait for 3+ market switches)
+- Assert: no crashes, trades fire correctly after each switch
+- Assert: `remember_trade` trade IDs are unique per (market, sub_interval)
+
+**B3. Performance Tracker vs TradeMemory Parity**
+- Compare `paper_trades.json` (from bot) vs TradeMemory DB query
+- Assert: trade count, win rate, total P&L all match
+- Assert: `performance_tracker` metrics mirror TradeMemory computed metrics
+
+#### Phase C: Live Tests (real money, small stakes)
+
+**C1. Single Real Trade + Memory**
+- Execute one live Polymarket trade ($1)
+- Record outcome in TradeMemory
+- Recall previous paper trades to verify OWM still works with mixed live/paper data
+
+**C2. Live Trading Session (1 hour)**
+- Run 4+ live trades in sequence
+- After each trade: `remember_trade` → `recall_memories` → `get_strategy_performance`
+- Log all responses for post-session analysis
+
+#### Test Data Requirements
+
+| Data | Source | When Needed |
+|---|---|---|
+| Polymarket BTC 15-min markets | Gamma API (`test.py`) | Always |
+| Fear & Greed index | `NewsSocialDataSource` | A1, B1 |
+| Coinbase BTC spot price | `CoinbaseDataSource` | A1, B1 |
+| Order book (CLOB) | Polymarket CLOB API | A1 (OrderBookImbalance) |
+| Deribit BTC options PCR | `DeribitPCRProcessor` | A1 (optional) |
+| Paper trade outcomes | `bot.py` simulation | A2, B1, B3 |
+| Live trade outcomes | Real Polymarket execution | C1, C2 |
+
+#### Success Criteria
+
+| Test | Pass Condition |
+|---|---|
+| A1 Signal processors | All 6 processors emit valid `TradingSignal` objects |
+| A2 Paper → TradeMemory | 100% of paper trades appear in TradeMemory DB |
+| A3 OWM recall | Recall returns 5+ relevant trades, top result score > 0.6 |
+| A4 Reflection | Returns ≥ 1 pattern insight, ≥ 1 actionable adjustment |
+| B1 End-to-end | All 50 trades mirrored between `paper_trades.json` and TradeMemory |
+| B2 Market switch | 0 crashes across 5+ market switches |
+| B3 Metrics parity | Win rate, P&L differ by < 1% between bot and TradeMemory |
+| C1 Live + memory | Live trade accessible via `recall_memories` within 1 second |
+| C2 1-hour session | All trades recorded, strategy win rate converges to ±5% of paper |
+
+---
+
+### 2.3 Binance Trade Test Cases
 
 Currently developing test cases to validate the Binance trading skill integration:
 - Verifying `baw market-order` quote accuracy
