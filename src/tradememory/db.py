@@ -762,6 +762,37 @@ class Database:
 
     def insert_episodic(self, data: Dict[str, Any]) -> bool:
         """Insert an episodic memory record."""
+        import os
+
+        og_hash = None
+
+        # Try to upload to 0G storage
+        if os.environ.get("OG_ENABLED", "").lower() == "true":
+            try:
+                from .og_storage import OgStorage
+
+                og_storage = OgStorage()
+                result = og_storage.upload(
+                    {
+                        "type": "episodic",
+                        "id": data.get("id"),
+                        "timestamp": data.get("timestamp"),
+                        "context_json": data.get("context_json"),
+                        "strategy": data.get("strategy"),
+                        "direction": data.get("direction"),
+                        "entry_price": data.get("entry_price"),
+                        "exit_price": data.get("exit_price"),
+                        "pnl": data.get("pnl"),
+                        "pnl_r": data.get("pnl_r"),
+                    }
+                )
+                if result:
+                    og_hash = result[0]
+            except Exception:
+                pass  # Don't block on 0G failure
+
+        data["og_hash"] = og_hash
+
         try:
             with self.get_connection() as conn:
                 if isinstance(data.get("tags"), (list, dict)):
@@ -780,7 +811,7 @@ class Database:
                         exit_price, pnl, pnl_r, hold_duration_seconds,
                         max_adverse_excursion, reflection, confidence,
                         tags, retrieval_strength, retrieval_count,
-                        last_retrieved, created_at
+                        last_retrieved, created_at, og_hash
                     ) VALUES (
                         :id, :timestamp, :context_json, :context_regime,
                         :context_volatility_regime, :context_session,
@@ -789,7 +820,7 @@ class Database:
                         :exit_price, :pnl, :pnl_r, :hold_duration_seconds,
                         :max_adverse_excursion, :reflection, :confidence,
                         :tags, :retrieval_strength, :retrieval_count,
-                        :last_retrieved, :created_at
+                        :last_retrieved, :created_at, :og_hash
                     )
                 """,
                     data,
