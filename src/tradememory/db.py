@@ -1055,6 +1055,39 @@ class Database:
 
     def upsert_procedural(self, data: Dict[str, Any]) -> bool:
         """Insert or replace a procedural memory record."""
+        import os
+
+        og_hash = None
+
+        if os.environ.get("OG_ENABLED", "").lower() == "true":
+            try:
+                from .og_storage import OgStorage
+
+                og_storage = OgStorage()
+                result = og_storage.upload(
+                    {
+                        "type": "procedural",
+                        "id": data.get("id"),
+                        "strategy": data.get("strategy"),
+                        "symbol": data.get("symbol"),
+                        "behavior_type": data.get("behavior_type"),
+                        "sample_size": data.get("sample_size"),
+                        "avg_hold_winners": data.get("avg_hold_winners"),
+                        "avg_hold_losers": data.get("avg_hold_losers"),
+                        "disposition_ratio": data.get("disposition_ratio"),
+                        "actual_lot_mean": data.get("actual_lot_mean"),
+                        "actual_lot_variance": data.get("actual_lot_variance"),
+                        "kelly_fraction_suggested": data.get("kelly_fraction_suggested"),
+                        "lot_vs_kelly_ratio": data.get("lot_vs_kelly_ratio"),
+                    }
+                )
+                if result:
+                    og_hash = result[0]
+            except Exception:
+                pass
+
+        data["og_hash"] = og_hash
+
         try:
             with self.get_connection() as conn:
                 now = datetime.now(timezone.utc).isoformat()
@@ -1067,13 +1100,13 @@ class Database:
                         avg_hold_winners, avg_hold_losers, disposition_ratio,
                         actual_lot_mean, actual_lot_variance,
                         kelly_fraction_suggested, lot_vs_kelly_ratio,
-                        created_at, updated_at
+                        created_at, updated_at, og_hash
                     ) VALUES (
                         :id, :strategy, :symbol, :behavior_type, :sample_size,
                         :avg_hold_winners, :avg_hold_losers, :disposition_ratio,
                         :actual_lot_mean, :actual_lot_variance,
                         :kelly_fraction_suggested, :lot_vs_kelly_ratio,
-                        :created_at, :updated_at
+                        :created_at, :updated_at, :og_hash
                     )
                 """,
                     data,
