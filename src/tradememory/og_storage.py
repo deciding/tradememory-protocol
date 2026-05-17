@@ -8,8 +8,8 @@ from typing import Optional, Tuple
 logger = logging.getLogger(__name__)
 
 try:
-    from core.indexer import Indexer
     from core.file import ZgFile
+    from core.indexer import Indexer
     from eth_account import Account
 except ImportError:
     Indexer = None
