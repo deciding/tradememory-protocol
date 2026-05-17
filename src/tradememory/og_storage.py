@@ -38,6 +38,23 @@ class OgStorage:
             return False
         return bool(self._private_key and self._indexer_rpc)
 
+    def validate_config(self) -> Tuple[bool, str]:
+        """Validate 0G configuration.
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not self._enabled:
+            return True, "disabled"
+
+        if not self._private_key:
+            return False, "OG_PRIVATE_KEY is required when OG_ENABLED=true"
+
+        if not self._indexer_rpc:
+            return False, "OG_INDEXER_RPC is required when OG_ENABLED=true"
+
+        return True, "ok"
+
     def upload(self, data: dict, network: str = "testnet") -> Optional[str]:
         """Upload data to 0G storage.
 

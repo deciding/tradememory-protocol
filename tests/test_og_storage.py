@@ -45,3 +45,27 @@ class TestOgStorage:
             result = storage.upload({"test": "data"})
             assert result == "0xabc"
             mock_indexer.upload.assert_called_once()
+
+    def test_validate_config_disabled(self):
+        from tradememory.og_storage import OgStorage
+
+        storage = OgStorage(enabled=False)
+        is_valid, msg = storage.validate_config()
+        assert is_valid is True
+        assert msg == "disabled"
+
+    def test_validate_config_missing_key(self):
+        from tradememory.og_storage import OgStorage
+
+        storage = OgStorage(enabled=True, private_key=None, indexer_rpc="http://test")
+        is_valid, msg = storage.validate_config()
+        assert is_valid is False
+        assert "OG_PRIVATE_KEY" in msg
+
+    def test_validate_config_valid(self):
+        from tradememory.og_storage import OgStorage
+
+        storage = OgStorage(enabled=True, private_key="0x123", indexer_rpc="http://test")
+        is_valid, msg = storage.validate_config()
+        assert is_valid is True
+        assert msg == "ok"
