@@ -30,6 +30,7 @@ class Database:
         """
         if db_path is None:
             import os
+
             db_path = os.environ.get("TRADEMEMORY_DB")
             if not db_path:
                 home_db = Path.home() / ".tradememory" / "tradememory.db"
@@ -255,6 +256,22 @@ class Database:
                 )
             """)
 
+            # Add og_hash column for 0G audit trail
+            try:
+                conn.execute("ALTER TABLE episodic_memory ADD COLUMN og_hash TEXT")
+            except Exception:
+                pass  # Column already exists
+
+            try:
+                conn.execute("ALTER TABLE semantic_memory ADD COLUMN og_hash TEXT")
+            except Exception:
+                pass  # Column already exists
+
+            try:
+                conn.execute("ALTER TABLE procedural_memory ADD COLUMN og_hash TEXT")
+            except Exception:
+                pass  # Column already exists
+
             # Affective State (Section 2.4 — single row, no GENERATED ALWAYS)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS affective_state (
@@ -347,17 +364,18 @@ class Database:
         try:
             with self.get_connection() as conn:
                 # Convert datetime objects to ISO strings
-                if isinstance(trade_data.get('timestamp'), datetime):
-                    trade_data['timestamp'] = trade_data['timestamp'].isoformat()
-                if isinstance(trade_data.get('exit_timestamp'), datetime):
-                    trade_data['exit_timestamp'] = trade_data['exit_timestamp'].isoformat()
+                if isinstance(trade_data.get("timestamp"), datetime):
+                    trade_data["timestamp"] = trade_data["timestamp"].isoformat()
+                if isinstance(trade_data.get("exit_timestamp"), datetime):
+                    trade_data["exit_timestamp"] = trade_data["exit_timestamp"].isoformat()
 
                 # Serialize JSON fields
-                trade_data['market_context'] = json.dumps(trade_data.get('market_context', {}))
-                trade_data['trade_references'] = json.dumps(trade_data.get('references', []))
-                trade_data['tags'] = json.dumps(trade_data.get('tags', []))
+                trade_data["market_context"] = json.dumps(trade_data.get("market_context", {}))
+                trade_data["trade_references"] = json.dumps(trade_data.get("references", []))
+                trade_data["tags"] = json.dumps(trade_data.get("tags", []))
 
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR IGNORE INTO trade_records VALUES (
                         :id, :timestamp, :symbol, :direction, :lot_size, :strategy,
                         :confidence, :reasoning, :market_context, :trade_references,
@@ -365,7 +383,9 @@ class Database:
                         :exit_reasoning, :slippage, :execution_quality, :lessons,
                         :tags, :grade
                     )
-                """, trade_data)
+                """,
+                    trade_data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to insert trade: {e}") from e
@@ -382,14 +402,23 @@ class Database:
             True if successful
         """
         # Convert datetime if present
-        if isinstance(outcome_data.get('exit_timestamp'), datetime):
-            outcome_data['exit_timestamp'] = outcome_data['exit_timestamp'].isoformat()
+        if isinstance(outcome_data.get("exit_timestamp"), datetime):
+            outcome_data["exit_timestamp"] = outcome_data["exit_timestamp"].isoformat()
 
         # Build UPDATE query
         fields = []
-        for key in ['exit_timestamp', 'exit_price', 'pnl', 'pnl_r',
-                    'hold_duration', 'exit_reasoning', 'slippage',
-                    'execution_quality', 'lessons', 'grade']:
+        for key in [
+            "exit_timestamp",
+            "exit_price",
+            "pnl",
+            "pnl_r",
+            "hold_duration",
+            "exit_reasoning",
+            "slippage",
+            "execution_quality",
+            "lessons",
+            "grade",
+        ]:
             if key in outcome_data:
                 fields.append(f"{key} = :{key}")
 
@@ -399,7 +428,7 @@ class Database:
         try:
             with self.get_connection() as conn:
                 query = f"UPDATE trade_records SET {', '.join(fields)} WHERE id = :id"  # nosec B608 — fields from internal whitelist
-                outcome_data['id'] = trade_id
+                outcome_data["id"] = trade_id
 
                 conn.execute(query, outcome_data)
                 return True
@@ -417,28 +446,22 @@ class Database:
             Trade record dict or None
         """
         with self.get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM trade_records WHERE id = ?",
-                (trade_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM trade_records WHERE id = ?", (trade_id,)).fetchone()
 
             if not row:
                 return None
 
             # Convert to dict and deserialize JSON fields
             trade = dict(row)
-            trade['market_context'] = json.loads(trade['market_context'])
-            trade['references'] = json.loads(trade['trade_references'])
-            del trade['trade_references']  # Remove DB column name
-            trade['tags'] = json.loads(trade['tags'])
+            trade["market_context"] = json.loads(trade["market_context"])
+            trade["references"] = json.loads(trade["trade_references"])
+            del trade["trade_references"]  # Remove DB column name
+            trade["tags"] = json.loads(trade["tags"])
 
             return trade
 
     def query_trades(
-        self,
-        strategy: Optional[str] = None,
-        symbol: Optional[str] = None,
-        limit: int = 100
+        self, strategy: Optional[str] = None, symbol: Optional[str] = None, limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
         Query trade records with filters.
@@ -470,10 +493,10 @@ class Database:
             trades = []
             for row in rows:
                 trade = dict(row)
-                trade['market_context'] = json.loads(trade['market_context'])
-                trade['references'] = json.loads(trade['trade_references'])
-                del trade['trade_references']  # Remove DB column name
-                trade['tags'] = json.loads(trade['tags'])
+                trade["market_context"] = json.loads(trade["market_context"])
+                trade["references"] = json.loads(trade["trade_references"])
+                del trade["trade_references"]  # Remove DB column name
+                trade["tags"] = json.loads(trade["tags"])
                 trades.append(trade)
 
             return trades
@@ -490,20 +513,23 @@ class Database:
         """
         try:
             with self.get_connection() as conn:
-                if isinstance(state_data.get('last_active'), datetime):
-                    state_data['last_active'] = state_data['last_active'].isoformat()
+                if isinstance(state_data.get("last_active"), datetime):
+                    state_data["last_active"] = state_data["last_active"].isoformat()
 
                 # Serialize JSON fields
-                state_data['warm_memory'] = json.dumps(state_data.get('warm_memory', {}))
-                state_data['active_positions'] = json.dumps(state_data.get('active_positions', []))
-                state_data['risk_constraints'] = json.dumps(state_data.get('risk_constraints', {}))
+                state_data["warm_memory"] = json.dumps(state_data.get("warm_memory", {}))
+                state_data["active_positions"] = json.dumps(state_data.get("active_positions", []))
+                state_data["risk_constraints"] = json.dumps(state_data.get("risk_constraints", {}))
 
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO session_state VALUES (
                         :agent_id, :last_active, :warm_memory,
                         :active_positions, :risk_constraints
                     )
-                """, state_data)
+                """,
+                    state_data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to save session state: {e}") from e
@@ -520,17 +546,16 @@ class Database:
         """
         with self.get_connection() as conn:
             row = conn.execute(
-                "SELECT * FROM session_state WHERE agent_id = ?",
-                (agent_id,)
+                "SELECT * FROM session_state WHERE agent_id = ?", (agent_id,)
             ).fetchone()
 
             if not row:
                 return None
 
             state = dict(row)
-            state['warm_memory'] = json.loads(state['warm_memory'])
-            state['active_positions'] = json.loads(state['active_positions'])
-            state['risk_constraints'] = json.loads(state['risk_constraints'])
+            state["warm_memory"] = json.loads(state["warm_memory"])
+            state["active_positions"] = json.loads(state["active_positions"])
+            state["risk_constraints"] = json.loads(state["risk_constraints"])
 
             return state
 
@@ -548,14 +573,17 @@ class Database:
         """
         try:
             with self.get_connection() as conn:
-                pattern_data['metrics'] = json.dumps(pattern_data.get('metrics', {}))
-                conn.execute("""
+                pattern_data["metrics"] = json.dumps(pattern_data.get("metrics", {}))
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO patterns VALUES (
                         :pattern_id, :pattern_type, :description, :confidence,
                         :sample_size, :date_range, :strategy, :symbol,
                         :metrics, :source, :validation_status, :discovered_at
                     )
-                """, pattern_data)
+                """,
+                    pattern_data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to insert pattern: {e}") from e
@@ -606,7 +634,7 @@ class Database:
             patterns = []
             for row in rows:
                 p = dict(row)
-                p['metrics'] = json.loads(p['metrics'])
+                p["metrics"] = json.loads(p["metrics"])
                 patterns.append(p)
 
             return patterns
@@ -623,15 +651,14 @@ class Database:
         """
         with self.get_connection() as conn:
             row = conn.execute(
-                "SELECT * FROM patterns WHERE pattern_id = ?",
-                (pattern_id,)
+                "SELECT * FROM patterns WHERE pattern_id = ?", (pattern_id,)
             ).fetchone()
 
             if not row:
                 return None
 
             p = dict(row)
-            p['metrics'] = json.loads(p['metrics'])
+            p["metrics"] = json.loads(p["metrics"])
             return p
 
     # ========== Strategy Adjustments (L3) ==========
@@ -648,14 +675,17 @@ class Database:
         """
         try:
             with self.get_connection() as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO strategy_adjustments VALUES (
                         :adjustment_id, :adjustment_type, :parameter,
                         :old_value, :new_value, :reason,
                         :source_pattern_id, :confidence, :status,
                         :created_at, :applied_at
                     )
-                """, adjustment_data)
+                """,
+                    adjustment_data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to insert adjustment: {e}") from e
@@ -721,8 +751,7 @@ class Database:
                     )
                 else:
                     result = conn.execute(
-                        "UPDATE strategy_adjustments SET status = ? "
-                        "WHERE adjustment_id = ?",
+                        "UPDATE strategy_adjustments SET status = ? WHERE adjustment_id = ?",
                         (status, adjustment_id),
                     )
                 return result.rowcount > 0
@@ -735,13 +764,14 @@ class Database:
         """Insert an episodic memory record."""
         try:
             with self.get_connection() as conn:
-                if isinstance(data.get('tags'), (list, dict)):
-                    data['tags'] = json.dumps(data['tags'])
-                if isinstance(data.get('context_json'), dict):
-                    data['context_json'] = json.dumps(data['context_json'])
-                if 'created_at' not in data:
-                    data['created_at'] = datetime.now(timezone.utc).isoformat()
-                conn.execute("""
+                if isinstance(data.get("tags"), (list, dict)):
+                    data["tags"] = json.dumps(data["tags"])
+                if isinstance(data.get("context_json"), dict):
+                    data["context_json"] = json.dumps(data["context_json"])
+                if "created_at" not in data:
+                    data["created_at"] = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    """
                     INSERT INTO episodic_memory (
                         id, timestamp, context_json, context_regime,
                         context_volatility_regime, context_session,
@@ -761,7 +791,9 @@ class Database:
                         :tags, :retrieval_strength, :retrieval_count,
                         :last_retrieved, :created_at
                     )
-                """, data)
+                """,
+                    data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to insert episodic memory: {e}") from e
@@ -792,8 +824,8 @@ class Database:
             results = []
             for row in rows:
                 d = dict(row)
-                d['context_json'] = json.loads(d['context_json']) if d['context_json'] else {}
-                d['tags'] = json.loads(d['tags']) if d['tags'] else []
+                d["context_json"] = json.loads(d["context_json"]) if d["context_json"] else {}
+                d["tags"] = json.loads(d["tags"]) if d["tags"] else []
                 results.append(d)
             return results
 
@@ -820,9 +852,7 @@ class Database:
             with self.get_connection() as conn:
                 # Ensure column exists (SQLite ignores duplicate ALTER TABLE ADD COLUMN)
                 try:
-                    conn.execute(
-                        "ALTER TABLE episodic_memory ADD COLUMN embedding TEXT"
-                    )
+                    conn.execute("ALTER TABLE episodic_memory ADD COLUMN embedding TEXT")
                 except Exception:
                     pass  # Column already exists
 
@@ -841,16 +871,17 @@ class Database:
         """Insert a semantic memory record."""
         try:
             with self.get_connection() as conn:
-                if isinstance(data.get('validity_conditions'), (dict, list)):
-                    data['validity_conditions'] = json.dumps(data['validity_conditions'])
+                if isinstance(data.get("validity_conditions"), (dict, list)):
+                    data["validity_conditions"] = json.dumps(data["validity_conditions"])
                 now = datetime.now(timezone.utc).isoformat()
-                data.setdefault('alpha', 1.0)
-                data.setdefault('beta', 1.0)
-                data.setdefault('sample_size', 0)
-                data.setdefault('retrieval_strength', 1.0)
-                data.setdefault('created_at', now)
-                data.setdefault('updated_at', now)
-                conn.execute("""
+                data.setdefault("alpha", 1.0)
+                data.setdefault("beta", 1.0)
+                data.setdefault("sample_size", 0)
+                data.setdefault("retrieval_strength", 1.0)
+                data.setdefault("created_at", now)
+                data.setdefault("updated_at", now)
+                conn.execute(
+                    """
                     INSERT INTO semantic_memory (
                         id, proposition, alpha, beta, sample_size,
                         strategy, symbol, regime, volatility_regime,
@@ -862,7 +893,9 @@ class Database:
                         :validity_conditions, :last_confirmed, :last_contradicted,
                         :source, :retrieval_strength, :created_at, :updated_at
                     )
-                """, data)
+                """,
+                    data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to insert semantic memory: {e}") from e
@@ -893,10 +926,12 @@ class Database:
             results = []
             for row in rows:
                 d = dict(row)
-                d['validity_conditions'] = json.loads(d['validity_conditions']) if d['validity_conditions'] else None
-                a, b = d['alpha'], d['beta']
-                d['confidence'] = a / (a + b) if (a + b) > 0 else 0.5
-                d['uncertainty'] = (a * b) / ((a + b) ** 2 * (a + b + 1)) if (a + b) > 0 else 1.0
+                d["validity_conditions"] = (
+                    json.loads(d["validity_conditions"]) if d["validity_conditions"] else None
+                )
+                a, b = d["alpha"], d["beta"]
+                d["confidence"] = a / (a + b) if (a + b) > 0 else 0.5
+                d["uncertainty"] = (a * b) / ((a + b) ** 2 * (a + b + 1)) if (a + b) > 0 else 1.0
                 results.append(d)
             return results
 
@@ -952,9 +987,7 @@ class Database:
                 )
                 return result.rowcount > 0
         except sqlite3.Error as e:
-            raise TradeMemoryDBError(
-                f"Failed to update semantic validity_conditions: {e}"
-            ) from e
+            raise TradeMemoryDBError(f"Failed to update semantic validity_conditions: {e}") from e
 
     # ========== OWM: Procedural Memory ==========
 
@@ -963,9 +996,10 @@ class Database:
         try:
             with self.get_connection() as conn:
                 now = datetime.now(timezone.utc).isoformat()
-                data.setdefault('created_at', now)
-                data['updated_at'] = now
-                conn.execute("""
+                data.setdefault("created_at", now)
+                data["updated_at"] = now
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO procedural_memory (
                         id, strategy, symbol, behavior_type, sample_size,
                         avg_hold_winners, avg_hold_losers, disposition_ratio,
@@ -979,7 +1013,9 @@ class Database:
                         :kelly_fraction_suggested, :lot_vs_kelly_ratio,
                         :created_at, :updated_at
                     )
-                """, data)
+                """,
+                    data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to upsert procedural memory: {e}") from e
@@ -1017,7 +1053,8 @@ class Database:
                 if existing:
                     return False
                 now = datetime.now(timezone.utc).isoformat()
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO affective_state (
                         id, confidence_level, risk_appetite, momentum_bias,
                         peak_equity, current_equity, drawdown_state,
@@ -1026,7 +1063,9 @@ class Database:
                     ) VALUES (
                         'current', 0.5, 1.0, 0.0, ?, ?, 0.0, 0.20, 0, 0, ?, '[]'
                     )
-                """, (peak_equity, current_equity, now))
+                """,
+                    (peak_equity, current_equity, now),
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to initialize affective state: {e}") from e
@@ -1034,24 +1073,23 @@ class Database:
     def load_affective(self) -> Optional[Dict[str, Any]]:
         """Load the current affective state."""
         with self.get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM affective_state WHERE id = 'current'"
-            ).fetchone()
+            row = conn.execute("SELECT * FROM affective_state WHERE id = 'current'").fetchone()
             if not row:
                 return None
             d = dict(row)
-            d['history_json'] = json.loads(d['history_json']) if d['history_json'] else []
+            d["history_json"] = json.loads(d["history_json"]) if d["history_json"] else []
             return d
 
     def save_affective(self, data: Dict[str, Any]) -> bool:
         """Save (INSERT OR REPLACE) the current affective state."""
         try:
             with self.get_connection() as conn:
-                if isinstance(data.get('history_json'), (list, dict)):
-                    data['history_json'] = json.dumps(data['history_json'])
-                data['id'] = 'current'
-                data.setdefault('last_updated', datetime.now(timezone.utc).isoformat())
-                conn.execute("""
+                if isinstance(data.get("history_json"), (list, dict)):
+                    data["history_json"] = json.dumps(data["history_json"])
+                data["id"] = "current"
+                data.setdefault("last_updated", datetime.now(timezone.utc).isoformat())
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO affective_state (
                         id, confidence_level, risk_appetite, momentum_bias,
                         peak_equity, current_equity, drawdown_state,
@@ -1063,7 +1101,9 @@ class Database:
                         :max_acceptable_drawdown, :consecutive_wins,
                         :consecutive_losses, :last_updated, :history_json
                     )
-                """, data)
+                """,
+                    data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to save affective state: {e}") from e
@@ -1083,24 +1123,29 @@ class Database:
         """Save (upsert) changepoint detector state."""
         try:
             with self.get_connection() as conn:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO changepoint_state (
                         id, strategy, symbol, state_json,
                         last_observation_count, last_changepoint_prob,
                         last_changepoint_at, updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    cp_id, strategy, symbol, state_json,
-                    observation_count, changepoint_prob,
-                    changepoint_at,
-                    datetime.now(timezone.utc).isoformat(),
-                ))
+                """,
+                    (
+                        cp_id,
+                        strategy,
+                        symbol,
+                        state_json,
+                        observation_count,
+                        changepoint_prob,
+                        changepoint_at,
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to save changepoint state: {e}") from e
 
-    def load_changepoint_state(
-        self, strategy: str, symbol: str
-    ) -> Optional[Dict[str, Any]]:
+    def load_changepoint_state(self, strategy: str, symbol: str) -> Optional[Dict[str, Any]]:
         """Load changepoint detector state for a strategy+symbol pair."""
         with self.get_connection() as conn:
             row = conn.execute(
@@ -1117,18 +1162,19 @@ class Database:
         """Insert a prospective memory record."""
         try:
             with self.get_connection() as conn:
-                if isinstance(data.get('trigger_condition'), (dict, list)):
-                    data['trigger_condition'] = json.dumps(data['trigger_condition'])
-                if isinstance(data.get('planned_action'), (dict, list)):
-                    data['planned_action'] = json.dumps(data['planned_action'])
-                if isinstance(data.get('source_episodic_ids'), (list,)):
-                    data['source_episodic_ids'] = json.dumps(data['source_episodic_ids'])
-                if isinstance(data.get('source_semantic_ids'), (list,)):
-                    data['source_semantic_ids'] = json.dumps(data['source_semantic_ids'])
-                data.setdefault('status', 'active')
-                data.setdefault('priority', 0.5)
-                data.setdefault('created_at', datetime.now(timezone.utc).isoformat())
-                conn.execute("""
+                if isinstance(data.get("trigger_condition"), (dict, list)):
+                    data["trigger_condition"] = json.dumps(data["trigger_condition"])
+                if isinstance(data.get("planned_action"), (dict, list)):
+                    data["planned_action"] = json.dumps(data["planned_action"])
+                if isinstance(data.get("source_episodic_ids"), (list,)):
+                    data["source_episodic_ids"] = json.dumps(data["source_episodic_ids"])
+                if isinstance(data.get("source_semantic_ids"), (list,)):
+                    data["source_semantic_ids"] = json.dumps(data["source_semantic_ids"])
+                data.setdefault("status", "active")
+                data.setdefault("priority", 0.5)
+                data.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+                conn.execute(
+                    """
                     INSERT INTO prospective_memory (
                         id, trigger_type, trigger_condition, planned_action,
                         action_type, status, priority, expiry,
@@ -1142,7 +1188,9 @@ class Database:
                         :triggered_at, :outcome_pnl_r, :outcome_reflection,
                         :created_at
                     )
-                """, data)
+                """,
+                    data,
+                )
                 return True
         except sqlite3.Error as e:
             raise TradeMemoryDBError(f"Failed to insert prospective memory: {e}") from e
@@ -1169,10 +1217,16 @@ class Database:
             results = []
             for row in rows:
                 d = dict(row)
-                d['trigger_condition'] = json.loads(d['trigger_condition']) if d['trigger_condition'] else {}
-                d['planned_action'] = json.loads(d['planned_action']) if d['planned_action'] else {}
-                d['source_episodic_ids'] = json.loads(d['source_episodic_ids']) if d['source_episodic_ids'] else []
-                d['source_semantic_ids'] = json.loads(d['source_semantic_ids']) if d['source_semantic_ids'] else []
+                d["trigger_condition"] = (
+                    json.loads(d["trigger_condition"]) if d["trigger_condition"] else {}
+                )
+                d["planned_action"] = json.loads(d["planned_action"]) if d["planned_action"] else {}
+                d["source_episodic_ids"] = (
+                    json.loads(d["source_episodic_ids"]) if d["source_episodic_ids"] else []
+                )
+                d["source_semantic_ids"] = (
+                    json.loads(d["source_semantic_ids"]) if d["source_semantic_ids"] else []
+                )
                 results.append(d)
             return results
 
