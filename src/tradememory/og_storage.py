@@ -3,9 +3,35 @@
 import json
 import logging
 import os
+import sys
+import types
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def _install_zerog_config_shim() -> None:
+    """Install a minimal config module for the 0G SDK import path.
+
+    The current storage SDK publishes top-level `core.*` modules that import a
+    top-level `config` module, but that module is not shipped in the wheel.
+    This shim provides the constants required by the storage SDK so imports work
+    from a normal installed environment.
+    """
+    if "config" in sys.modules:
+        return
+
+    config = types.ModuleType("config")
+    config.DEFAULT_CHUNK_SIZE = 256
+    config.DEFAULT_SEGMENT_MAX_CHUNKS = 1024
+    config.DEFAULT_SEGMENT_SIZE = config.DEFAULT_CHUNK_SIZE * config.DEFAULT_SEGMENT_MAX_CHUNKS
+    config.DEFAULT_BATCH_SIZE = config.DEFAULT_SEGMENT_SIZE
+    config.EMPTY_CHUNK_HASH = bytes(32)
+    config.ZERO_HASH = "0x" + "00" * 32
+    sys.modules["config"] = config
+
+
+_install_zerog_config_shim()
 
 try:
     from core.file import ZgFile
@@ -82,7 +108,12 @@ class OgStorage:
                 file,
                 self._blockchain_rpc,
                 account,
-                {"expectedReplica": 1, "finalityRequired": True},
+                {
+                    "tags": b"\x00",
+                    "finalityRequired": True,
+                    "expectedReplica": 1,
+                    "account": account,
+                },
             )
 
             if err:

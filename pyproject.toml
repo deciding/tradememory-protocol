@@ -25,7 +25,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
     "click>=8.0.0",
-    "0g-storage-sdk>=0.1.0",
+    "0g-storage-sdk @ git+https://github.com/mandatedisrael/0g-py-sdk.git#subdirectory=0g_py_storage",
     "eth-account>=0.9.0",
 ]
 

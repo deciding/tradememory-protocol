@@ -65,6 +65,29 @@ class TestOgStorage:
             result = storage.upload({"test": "data"})
             assert result == ("0xabc", "0xdef")
 
+    def test_upload_passes_account_in_options(self):
+        import tradememory.og_storage as og_module
+        from tradememory.og_storage import OgStorage
+
+        storage = OgStorage(enabled=True, private_key="0x123", indexer_rpc="http://test")
+
+        mock_indexer = MagicMock()
+        mock_indexer.upload.return_value = ({"rootHash": "0xabc", "txHash": "0xdef"}, None)
+
+        mock_file = MagicMock()
+        mock_account = MagicMock()
+        mock_account.from_key.return_value = mock_account
+
+        with (
+            patch.object(og_module, "Indexer", return_value=mock_indexer),
+            patch.object(og_module, "ZgFile", return_value=mock_file),
+            patch.object(og_module, "Account", mock_account),
+        ):
+            result = storage.upload({"test": "data"})
+            assert result == ("0xabc", "0xdef")
+            _, _, _, upload_opts = mock_indexer.upload.call_args[0]
+            assert upload_opts["account"] is mock_account
+
     def test_validate_config_disabled(self):
         from tradememory.og_storage import OgStorage
 

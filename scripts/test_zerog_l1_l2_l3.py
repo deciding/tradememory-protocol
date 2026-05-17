@@ -11,11 +11,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SDK_ROOT = REPO_ROOT / "0g-py-sdk" / "0g_py_storage"
 SRC_ROOT = REPO_ROOT / "src"
 
 sys.path.insert(0, str(SRC_ROOT))
-sys.path.insert(0, str(SDK_ROOT))
 
 load_dotenv(REPO_ROOT / ".env")
 
@@ -38,9 +36,6 @@ def utc_now() -> str:
 
 
 def main() -> int:
-    from core.file import ZgFile
-    from core.indexer import Indexer
-    from eth_account import Account
     from tradememory.db import Database
     from tradememory.og_storage import OgStorage
 
@@ -52,49 +47,18 @@ def main() -> int:
     db_path = REPO_ROOT / "data" / f"zerog_smoke_{uuid.uuid4().hex}.db"
     db = Database(str(db_path))
 
-    account = Account.from_key(os.environ["OG_PRIVATE_KEY"])
-    blockchain_rpc = os.environ["OG_BLOCKCHAIN_RPC"]
-    indexer_rpc = os.environ["OG_INDEXER_RPC"]
-    indexer = Indexer(indexer_rpc)
-
     captured: dict[str, dict[str, str]] = {}
 
-    class DirectOgStorage(OgStorage):
-        def upload(self, data: dict, network: str = "testnet"):
-            payload = data.copy()
-            payload.pop("og_hash", None)
-            payload.pop("og_tx_hash", None)
-            layer = payload.get("type", "unknown")
-            file = ZgFile.from_bytes(str(payload).encode("utf-8"))
-            try:
-                result, err = indexer.upload(
-                    file,
-                    blockchain_rpc,
-                    account,
-                    {
-                        "tags": b"\x00",
-                        "finalityRequired": True,
-                        "expectedReplica": 1,
-                        "account": account,
-                    },
-                )
-            finally:
-                file.close()
+    original_upload = OgStorage.upload
 
-            if err is not None:
-                raise RuntimeError(f"0G upload failed: {err}")
+    def recording_upload(self, data: dict, network: str = "testnet"):
+        result = original_upload(self, data, network)
+        if result:
+            layer = data.get("type", "unknown")
+            captured[layer] = {"txHash": result[1], "rootHash": result[0]}
+        return result
 
-            root_hash = result.get("rootHash")
-            tx_hash = result.get("txHash")
-            if not root_hash:
-                raise RuntimeError(f"Unexpected upload result: {result}")
-            captured[layer] = {"txHash": tx_hash or "", "rootHash": root_hash}
-            return root_hash, tx_hash or ""
-
-    original_upload_cls = OgStorage
-    from tradememory import og_storage as og_module
-
-    og_module.OgStorage = DirectOgStorage
+    OgStorage.upload = recording_upload
 
     try:
         episodic_id = f"epi-{uuid.uuid4().hex[:8]}"
@@ -218,7 +182,7 @@ def main() -> int:
         return 0
 
     finally:
-        og_module.OgStorage = original_upload_cls
+        OgStorage.upload = original_upload
 
 
 if __name__ == "__main__":
