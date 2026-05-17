@@ -1,4 +1,5 @@
 import pytest
+import sys
 from unittest.mock import patch, MagicMock
 
 
@@ -23,3 +24,24 @@ class TestOgStorage:
         storage = OgStorage()
         result = storage.upload({"test": "data"})
         assert result is None
+
+    def test_upload_with_mock_success(self):
+        import tradememory.og_storage as og_module
+        from tradememory.og_storage import OgStorage
+
+        storage = OgStorage(enabled=True, private_key="0x123", indexer_rpc="http://test")
+
+        mock_indexer = MagicMock()
+        mock_indexer.upload.return_value = ({"rootHash": "0xabc"}, None)
+
+        mock_file = MagicMock()
+        mock_account = MagicMock()
+
+        with (
+            patch.object(og_module, "Indexer", return_value=mock_indexer),
+            patch.object(og_module, "ZgFile", return_value=mock_file),
+            patch.object(og_module, "Account"),
+        ):
+            result = storage.upload({"test": "data"})
+            assert result == "0xabc"
+            mock_indexer.upload.assert_called_once()
