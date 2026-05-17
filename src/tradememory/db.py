@@ -900,6 +900,37 @@ class Database:
 
     def insert_semantic(self, data: Dict[str, Any]) -> bool:
         """Insert a semantic memory record."""
+        import os
+
+        og_hash = None
+
+        # Try to upload to 0G storage
+        if os.environ.get("OG_ENABLED", "").lower() == "true":
+            try:
+                from .og_storage import OgStorage
+
+                og_storage = OgStorage()
+                result = og_storage.upload(
+                    {
+                        "type": "semantic",
+                        "id": data.get("id"),
+                        "proposition": data.get("proposition"),
+                        "alpha": data.get("alpha", 1.0),
+                        "beta": data.get("beta", 1.0),
+                        "sample_size": data.get("sample_size", 0),
+                        "strategy": data.get("strategy"),
+                        "symbol": data.get("symbol"),
+                        "regime": data.get("regime"),
+                        "validity_conditions": data.get("validity_conditions"),
+                    }
+                )
+                if result:
+                    og_hash = result[0]
+            except Exception:
+                pass  # Don't block on 0G failure
+
+        data["og_hash"] = og_hash
+
         try:
             with self.get_connection() as conn:
                 if isinstance(data.get("validity_conditions"), (dict, list)):
@@ -917,12 +948,12 @@ class Database:
                         id, proposition, alpha, beta, sample_size,
                         strategy, symbol, regime, volatility_regime,
                         validity_conditions, last_confirmed, last_contradicted,
-                        source, retrieval_strength, created_at, updated_at
+                        source, retrieval_strength, created_at, updated_at, og_hash
                     ) VALUES (
                         :id, :proposition, :alpha, :beta, :sample_size,
                         :strategy, :symbol, :regime, :volatility_regime,
                         :validity_conditions, :last_confirmed, :last_contradicted,
-                        :source, :retrieval_strength, :created_at, :updated_at
+                        :source, :retrieval_strength, :created_at, :updated_at, :og_hash
                     )
                 """,
                     data,
