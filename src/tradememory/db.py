@@ -263,12 +263,27 @@ class Database:
                 pass  # Column already exists
 
             try:
+                conn.execute("ALTER TABLE episodic_memory ADD COLUMN og_tx_hash TEXT")
+            except Exception:
+                pass  # Column already exists
+
+            try:
                 conn.execute("ALTER TABLE semantic_memory ADD COLUMN og_hash TEXT")
             except Exception:
                 pass  # Column already exists
 
             try:
+                conn.execute("ALTER TABLE semantic_memory ADD COLUMN og_tx_hash TEXT")
+            except Exception:
+                pass  # Column already exists
+
+            try:
                 conn.execute("ALTER TABLE procedural_memory ADD COLUMN og_hash TEXT")
+            except Exception:
+                pass  # Column already exists
+
+            try:
+                conn.execute("ALTER TABLE procedural_memory ADD COLUMN og_tx_hash TEXT")
             except Exception:
                 pass  # Column already exists
 
@@ -765,6 +780,7 @@ class Database:
         import os
 
         og_hash = None
+        og_tx_hash = None
 
         # Try to upload to 0G storage
         if os.environ.get("OG_ENABLED", "").lower() == "true":
@@ -787,11 +803,16 @@ class Database:
                     }
                 )
                 if result:
-                    og_hash = result[0]
+                    if isinstance(result, tuple):
+                        og_hash = result[0]
+                        og_tx_hash = result[1] if len(result) > 1 else None
+                    else:
+                        og_hash = result
             except Exception:
                 pass  # Don't block on 0G failure
 
         data["og_hash"] = og_hash
+        data["og_tx_hash"] = og_tx_hash
 
         try:
             with self.get_connection() as conn:
@@ -811,7 +832,7 @@ class Database:
                         exit_price, pnl, pnl_r, hold_duration_seconds,
                         max_adverse_excursion, reflection, confidence,
                         tags, retrieval_strength, retrieval_count,
-                        last_retrieved, created_at, og_hash
+                        last_retrieved, created_at, og_hash, og_tx_hash
                     ) VALUES (
                         :id, :timestamp, :context_json, :context_regime,
                         :context_volatility_regime, :context_session,
@@ -820,7 +841,7 @@ class Database:
                         :exit_price, :pnl, :pnl_r, :hold_duration_seconds,
                         :max_adverse_excursion, :reflection, :confidence,
                         :tags, :retrieval_strength, :retrieval_count,
-                        :last_retrieved, :created_at, :og_hash
+                        :last_retrieved, :created_at, :og_hash, :og_tx_hash
                     )
                 """,
                     data,
@@ -903,6 +924,7 @@ class Database:
         import os
 
         og_hash = None
+        og_tx_hash = None
 
         # Try to upload to 0G storage
         if os.environ.get("OG_ENABLED", "").lower() == "true":
@@ -925,11 +947,16 @@ class Database:
                     }
                 )
                 if result:
-                    og_hash = result[0]
+                    if isinstance(result, tuple):
+                        og_hash = result[0]
+                        og_tx_hash = result[1] if len(result) > 1 else None
+                    else:
+                        og_hash = result
             except Exception:
                 pass  # Don't block on 0G failure
 
         data["og_hash"] = og_hash
+        data["og_tx_hash"] = og_tx_hash
 
         try:
             with self.get_connection() as conn:
@@ -948,12 +975,12 @@ class Database:
                         id, proposition, alpha, beta, sample_size,
                         strategy, symbol, regime, volatility_regime,
                         validity_conditions, last_confirmed, last_contradicted,
-                        source, retrieval_strength, created_at, updated_at, og_hash
+                        source, retrieval_strength, created_at, updated_at, og_hash, og_tx_hash
                     ) VALUES (
                         :id, :proposition, :alpha, :beta, :sample_size,
                         :strategy, :symbol, :regime, :volatility_regime,
                         :validity_conditions, :last_confirmed, :last_contradicted,
-                        :source, :retrieval_strength, :created_at, :updated_at, :og_hash
+                        :source, :retrieval_strength, :created_at, :updated_at, :og_hash, :og_tx_hash
                     )
                 """,
                     data,
@@ -1058,6 +1085,7 @@ class Database:
         import os
 
         og_hash = None
+        og_tx_hash = None
 
         if os.environ.get("OG_ENABLED", "").lower() == "true":
             try:
@@ -1082,11 +1110,16 @@ class Database:
                     }
                 )
                 if result:
-                    og_hash = result[0]
+                    if isinstance(result, tuple):
+                        og_hash = result[0]
+                        og_tx_hash = result[1] if len(result) > 1 else None
+                    else:
+                        og_hash = result
             except Exception:
                 pass
 
         data["og_hash"] = og_hash
+        data["og_tx_hash"] = og_tx_hash
 
         try:
             with self.get_connection() as conn:
@@ -1100,13 +1133,13 @@ class Database:
                         avg_hold_winners, avg_hold_losers, disposition_ratio,
                         actual_lot_mean, actual_lot_variance,
                         kelly_fraction_suggested, lot_vs_kelly_ratio,
-                        created_at, updated_at, og_hash
+                        created_at, updated_at, og_hash, og_tx_hash
                     ) VALUES (
                         :id, :strategy, :symbol, :behavior_type, :sample_size,
                         :avg_hold_winners, :avg_hold_losers, :disposition_ratio,
                         :actual_lot_mean, :actual_lot_variance,
                         :kelly_fraction_suggested, :lot_vs_kelly_ratio,
-                        :created_at, :updated_at, :og_hash
+                        :created_at, :updated_at, :og_hash, :og_tx_hash
                     )
                 """,
                     data,

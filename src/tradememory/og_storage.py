@@ -55,7 +55,7 @@ class OgStorage:
 
         return True, "ok"
 
-    def upload(self, data: dict, network: str = "testnet") -> Optional[str]:
+    def upload(self, data: dict, network: str = "testnet") -> Optional[Tuple[str, str]]:
         """Upload data to 0G storage.
 
         Args:
@@ -63,7 +63,7 @@ class OgStorage:
             network: Network to use (testnet/mainnet)
 
         Returns:
-            Root hash string or None if unavailable
+            Tuple of (root_hash, tx_hash) or None if unavailable
         """
         if not self.is_available():
             return None
@@ -90,7 +90,12 @@ class OgStorage:
                 return None
 
             root_hash = result.get("rootHash") if result else None
-            return root_hash
+            tx_hash = result.get("txHash") if result else None
+
+            if not root_hash:
+                return None
+
+            return root_hash, tx_hash or ""
 
         except Exception as e:
             logger.warning(f"0G upload error: {e}")

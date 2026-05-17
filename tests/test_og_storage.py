@@ -43,8 +43,27 @@ class TestOgStorage:
             patch.object(og_module, "Account"),
         ):
             result = storage.upload({"test": "data"})
-            assert result == "0xabc"
+            assert result == ("0xabc", "")
             mock_indexer.upload.assert_called_once()
+
+    def test_upload_with_mock_tx_hash(self):
+        import tradememory.og_storage as og_module
+        from tradememory.og_storage import OgStorage
+
+        storage = OgStorage(enabled=True, private_key="0x123", indexer_rpc="http://test")
+
+        mock_indexer = MagicMock()
+        mock_indexer.upload.return_value = ({"rootHash": "0xabc", "txHash": "0xdef"}, None)
+
+        mock_file = MagicMock()
+
+        with (
+            patch.object(og_module, "Indexer", return_value=mock_indexer),
+            patch.object(og_module, "ZgFile", return_value=mock_file),
+            patch.object(og_module, "Account"),
+        ):
+            result = storage.upload({"test": "data"})
+            assert result == ("0xabc", "0xdef")
 
     def test_validate_config_disabled(self):
         from tradememory.og_storage import OgStorage
