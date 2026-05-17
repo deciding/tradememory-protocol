@@ -21,6 +21,7 @@ wheels/
 *.egg
 
 # Virtual environments
+.venv/
 venv/
 ENV/
 env/
@@ -93,6 +94,7 @@ dashboard/dist/
 # Old marketing/drafts
 marketing/
 drafts/
+0g-py-sdk/
 
 # OS
 .DS_Store
