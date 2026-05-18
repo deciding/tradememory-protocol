@@ -22,6 +22,7 @@ from .db import Database
 from .journal import TradeJournal
 from .models import SessionState, TradeDirection, TradeProposal
 from .mt5_connector import MT5Connector
+from .og_storage import print_zerog_startup_notice
 from .owm import ContextVector, outcome_weighted_recall
 from .owm_helpers import (
     ensure_tz,
@@ -45,7 +46,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="TradeMemory Protocol",
     description="AI Agent Trading Memory & Adaptive Decision Layer",
-    version="0.5.1"
+    version="0.5.1",
 )
 
 # CORS middleware — allow dashboard dev server
@@ -76,8 +77,10 @@ adaptive_risk = AdaptiveRisk(journal=journal, state_manager=state_manager)
 
 # ========== MCP Tool Request/Response Models ==========
 
+
 class RecordDecisionRequest(BaseModel):
     """Request for trade.record_decision"""
+
     trade_id: str
     symbol: str
     direction: str
@@ -91,6 +94,7 @@ class RecordDecisionRequest(BaseModel):
 
 class RecordOutcomeRequest(BaseModel):
     """Request for trade.record_outcome"""
+
     trade_id: str
     exit_price: float
     pnl: float
@@ -104,6 +108,7 @@ class RecordOutcomeRequest(BaseModel):
 
 class QueryHistoryRequest(BaseModel):
     """Request for trade.query_history"""
+
     strategy: Optional[str] = None
     symbol: Optional[str] = None
     limit: int = Field(default=100, le=1000)
@@ -111,15 +116,18 @@ class QueryHistoryRequest(BaseModel):
 
 class LoadStateRequest(BaseModel):
     """Request for state.load"""
+
     agent_id: str
 
 
 class SaveStateRequest(BaseModel):
     """Request for state.save"""
+
     state: Dict[str, Any]
 
 
 # ========== MCP Tool Endpoints ==========
+
 
 @app.post("/trade/record_decision")
 async def trade_record_decision(req: RecordDecisionRequest):
@@ -137,14 +145,10 @@ async def trade_record_decision(req: RecordDecisionRequest):
             confidence=req.confidence,
             reasoning=req.reasoning,
             market_context=req.market_context,
-            references=req.references
+            references=req.references,
         )
 
-        return {
-            "success": True,
-            "trade_id": trade.id,
-            "timestamp": trade.timestamp.isoformat()
-        }
+        return {"success": True, "trade_id": trade.id, "timestamp": trade.timestamp.isoformat()}
 
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -167,13 +171,10 @@ async def trade_record_outcome(req: RecordOutcomeRequest):
             hold_duration=req.hold_duration,
             slippage=req.slippage,
             execution_quality=req.execution_quality,
-            lessons=req.lessons
+            lessons=req.lessons,
         )
 
-        return {
-            "success": success,
-            "trade_id": req.trade_id
-        }
+        return {"success": success, "trade_id": req.trade_id}
 
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -187,17 +188,9 @@ async def trade_query_history(req: QueryHistoryRequest):
     Search past trades by strategy/date/result.
     """
     try:
-        trades = journal.query_history(
-            strategy=req.strategy,
-            symbol=req.symbol,
-            limit=req.limit
-        )
+        trades = journal.query_history(strategy=req.strategy, symbol=req.symbol, limit=req.limit)
 
-        return {
-            "success": True,
-            "count": len(trades),
-            "trades": [t.model_dump() for t in trades]
-        }
+        return {"success": True, "count": len(trades), "trades": [t.model_dump() for t in trades]}
 
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -216,7 +209,7 @@ async def trade_get_active():
         return {
             "success": True,
             "count": len(active_trades),
-            "trades": [t.model_dump() for t in active_trades]
+            "trades": [t.model_dump() for t in active_trades],
         }
 
     except Exception as e:
@@ -233,10 +226,7 @@ async def state_load(req: LoadStateRequest):
     try:
         state = state_manager.load_state(req.agent_id)
 
-        return {
-            "success": True,
-            "state": state.model_dump()
-        }
+        return {"success": True, "state": state.model_dump()}
 
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -254,10 +244,7 @@ async def state_save(req: SaveStateRequest):
         state = SessionState(**req.state)
         success = state_manager.save_state(state)
 
-        return {
-            "success": success,
-            "agent_id": state.agent_id
-        }
+        return {"success": success, "agent_id": state.agent_id}
 
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -285,7 +272,7 @@ async def reflect_run_daily(date: Optional[str] = None):
         return {
             "success": True,
             "date": (target_date or date_type.today()).isoformat(),
-            "summary": summary
+            "summary": summary,
         }
 
     except Exception as e:
@@ -364,11 +351,7 @@ async def mt5_sync(agent_id: str = "ng-gold-agent"):
     try:
         stats = mt5_connector.sync_trades(agent_id=agent_id)
 
-        return {
-            "success": True,
-            "agent_id": agent_id,
-            "stats": stats
-        }
+        return {"success": True, "agent_id": agent_id, "stats": stats}
 
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -377,6 +360,7 @@ async def mt5_sync(agent_id: str = "ng-gold-agent"):
 
 class MT5ConnectRequest(BaseModel):
     """Request for mt5.connect"""
+
     login: int
     password: str
     server: str
@@ -391,15 +375,12 @@ async def mt5_connect(req: MT5ConnectRequest):
     """
     try:
         success = mt5_connector.connect(
-            login=req.login,
-            password=req.password,
-            server=req.server,
-            path=req.path
+            login=req.login, password=req.password, server=req.server, path=req.path
         )
 
         return {
             "success": success,
-            "message": "Connected to MT5" if success else "Connection failed"
+            "message": "Connected to MT5" if success else "Connection failed",
         }
 
     except Exception as e:
@@ -409,8 +390,10 @@ async def mt5_connect(req: MT5ConnectRequest):
 
 # ========== Risk Endpoints ==========
 
+
 class GetConstraintsRequest(BaseModel):
     """Request for risk.get_constraints"""
+
     agent_id: str
     symbol: Optional[str] = None
     strategy: Optional[str] = None
@@ -419,6 +402,7 @@ class GetConstraintsRequest(BaseModel):
 
 class CheckTradeRequest(BaseModel):
     """Request for risk.check_trade"""
+
     agent_id: str
     symbol: str
     direction: str
@@ -490,13 +474,16 @@ async def risk_check_trade(req: CheckTradeRequest):
 
 # ========== Pattern Discovery Endpoints ==========
 
+
 class DiscoverPatternsRequest(BaseModel):
     """Request for reflect.discover_patterns"""
+
     starting_balance: float = 10000.0
 
 
 class QueryPatternsRequest(BaseModel):
     """Request for patterns.query"""
+
     strategy: Optional[str] = None
     symbol: Optional[str] = None
     pattern_type: Optional[str] = None
@@ -553,19 +540,23 @@ async def query_patterns(req: QueryPatternsRequest):
 
 # ========== L3 Strategy Adjustment Endpoints ==========
 
+
 class GenerateAdjustmentsRequest(BaseModel):
     """Request for reflect.generate_adjustments"""
+
     pass
 
 
 class QueryAdjustmentsRequest(BaseModel):
     """Request for adjustments.query"""
+
     status: Optional[str] = None
     adjustment_type: Optional[str] = None
 
 
 class UpdateAdjustmentStatusRequest(BaseModel):
     """Request for adjustments.update_status"""
+
     adjustment_id: str
     status: str
     applied_at: Optional[str] = None
@@ -657,11 +648,7 @@ async def update_adjustment_status(req: UpdateAdjustmentStatusRequest):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "TradeMemory Protocol",
-        "version": "0.5.1"
-    }
+    return {"status": "healthy", "service": "TradeMemory Protocol", "version": "0.5.1"}
 
 
 # ========== OWM (Outcome-Weighted Memory) Endpoints ==========
@@ -669,6 +656,7 @@ async def health_check():
 
 class RememberTradeRequest(BaseModel):
     """Request for POST /owm/remember"""
+
     symbol: str
     direction: str
     entry_price: float
@@ -688,6 +676,7 @@ class RememberTradeRequest(BaseModel):
 
 class RecallMemoriesRequest(BaseModel):
     """Request for POST /owm/recall"""
+
     symbol: str
     market_context: str
     context_regime: Optional[str] = None
@@ -699,6 +688,7 @@ class RecallMemoriesRequest(BaseModel):
 
 class CreatePlanRequest(BaseModel):
     """Request for POST /owm/plan"""
+
     trigger_type: str
     trigger_condition: str
     planned_action: str
@@ -716,7 +706,10 @@ async def owm_remember(req: RememberTradeRequest):
         ts = req.timestamp or datetime.now(timezone.utc).isoformat()
         direction_lower = req.direction.lower()
         if direction_lower not in ("long", "short"):
-            raise HTTPException(status_code=400, detail=f"direction must be 'long' or 'short', got '{req.direction}'")
+            raise HTTPException(
+                status_code=400,
+                detail=f"direction must be 'long' or 'short', got '{req.direction}'",
+            )
         symbol_upper = req.symbol.upper()
 
         context_dict = {
@@ -754,9 +747,13 @@ async def owm_remember(req: RememberTradeRequest):
         }
         db.insert_episodic(episodic_data)
 
-        update_semantic_from_trade(db, symbol_upper, req.strategy_name, req.pnl, req.pnl_r, req.context_regime, tid)
+        update_semantic_from_trade(
+            db, symbol_upper, req.strategy_name, req.pnl, req.pnl_r, req.context_regime, tid
+        )
         update_procedural_from_trade(db, symbol_upper, req.strategy_name, req.pnl)
-        update_affective_from_trade(db, req.pnl, req.confidence, strategy_name=req.strategy_name, symbol=symbol_upper)
+        update_affective_from_trade(
+            db, req.pnl, req.confidence, strategy_name=req.strategy_name, symbol=symbol_upper
+        )
 
         trade_data = {
             "id": tid,
@@ -833,37 +830,43 @@ async def owm_recall(req: RecallMemoriesRequest):
                 ep_symbol = ctx.get("symbol")
                 if ep_symbol and ep_symbol != symbol_upper:
                     continue
-                candidates.append({
-                    "id": ep["id"],
-                    "memory_type": "episodic",
-                    "timestamp": ensure_tz(ep.get("timestamp")),
-                    "confidence": ep.get("confidence", 0.5),
-                    "context": ctx,
-                    "pnl_r": ep.get("pnl_r"),
-                    "pnl": ep.get("pnl"),
-                    "strategy": ep.get("strategy"),
-                    "direction": ep.get("direction"),
-                    "reflection": ep.get("reflection"),
-                })
+                candidates.append(
+                    {
+                        "id": ep["id"],
+                        "memory_type": "episodic",
+                        "timestamp": ensure_tz(ep.get("timestamp")),
+                        "confidence": ep.get("confidence", 0.5),
+                        "context": ctx,
+                        "pnl_r": ep.get("pnl_r"),
+                        "pnl": ep.get("pnl"),
+                        "strategy": ep.get("strategy"),
+                        "direction": ep.get("direction"),
+                        "reflection": ep.get("reflection"),
+                    }
+                )
 
         if "semantic" in memory_types:
-            semantic = db.query_semantic(strategy=req.strategy_name, symbol=symbol_upper, limit=req.limit * 3)
+            semantic = db.query_semantic(
+                strategy=req.strategy_name, symbol=symbol_upper, limit=req.limit * 3
+            )
             for sem in semantic:
-                candidates.append({
-                    "id": sem["id"],
-                    "memory_type": "semantic",
-                    "timestamp": ensure_tz(sem.get("updated_at") or sem.get("created_at")),
-                    "confidence": sem.get("confidence", 0.5),
-                    "context": {
-                        "symbol": sem.get("symbol"),
-                        "regime": sem.get("regime"),
-                        "volatility_regime": sem.get("volatility_regime"),
-                    },
-                    "proposition": sem.get("proposition"),
-                    "alpha": sem.get("alpha"),
-                    "beta": sem.get("beta"),
-                    "sample_size": sem.get("sample_size"),
-                })
+                candidates.append(
+                    {
+                        "id": sem["id"],
+                        "memory_type": "semantic",
+                        "timestamp": ensure_tz(sem.get("updated_at") or sem.get("created_at")),
+                        "confidence": sem.get("confidence", 0.5),
+                        "context": {
+                            "symbol": sem.get("symbol"),
+                            "regime": sem.get("regime"),
+                            "volatility_regime": sem.get("volatility_regime"),
+                        },
+                        "proposition": sem.get("proposition"),
+                        "alpha": sem.get("alpha"),
+                        "beta": sem.get("beta"),
+                        "sample_size": sem.get("sample_size"),
+                    }
+                )
 
         affective = db.load_affective()
         affective_state = None
@@ -912,7 +915,6 @@ async def owm_recall(req: RecallMemoriesRequest):
 
         # Log recall event to PostgreSQL for Intelligence page (side effect)
         try:
-
             from sqlalchemy import text as sa_text
 
             from .database import get_async_session
@@ -929,7 +931,8 @@ async def owm_recall(req: RecallMemoriesRequest):
                 negative_ratio = neg_count / len(results)
 
                 async with get_async_session() as session:
-                    await session.execute(sa_text("""
+                    await session.execute(
+                        sa_text("""
                         INSERT INTO recall_events
                         (timestamp, query_symbol, query_context, query_regime,
                          result_count, avg_total, avg_q, avg_sim, avg_rec, avg_conf, avg_aff,
@@ -937,19 +940,21 @@ async def owm_recall(req: RecallMemoriesRequest):
                         VALUES (NOW(), :symbol, :context, :regime,
                                 :result_count, :avg_total, :avg_q, :avg_sim, :avg_rec, :avg_conf, :avg_aff,
                                 :negative_ratio)
-                    """), {
-                        "symbol": symbol_upper,
-                        "context": req.market_context,
-                        "regime": req.context_regime,
-                        "result_count": len(results),
-                        "avg_total": avg_total,
-                        "avg_q": avg_q,
-                        "avg_sim": avg_sim,
-                        "avg_rec": avg_rec,
-                        "avg_conf": avg_conf,
-                        "avg_aff": avg_aff,
-                        "negative_ratio": negative_ratio,
-                    })
+                    """),
+                        {
+                            "symbol": symbol_upper,
+                            "context": req.market_context,
+                            "regime": req.context_regime,
+                            "result_count": len(results),
+                            "avg_total": avg_total,
+                            "avg_q": avg_q,
+                            "avg_sim": avg_sim,
+                            "avg_rec": avg_rec,
+                            "avg_conf": avg_conf,
+                            "avg_aff": avg_aff,
+                            "negative_ratio": negative_ratio,
+                        },
+                    )
         except Exception:
             pass  # PG unavailable — silently skip, recall still works
 
@@ -978,17 +983,19 @@ async def owm_behavioral(
 
         results = []
         for rec in records:
-            results.append({
-                "strategy": rec.get("strategy"),
-                "symbol": rec.get("symbol"),
-                "avg_hold_winners": rec.get("avg_hold_winners"),
-                "avg_hold_losers": rec.get("avg_hold_losers"),
-                "disposition_ratio": rec.get("disposition_ratio"),
-                "lot_sizing_variance": rec.get("actual_lot_variance"),
-                "kelly_fraction_suggested": rec.get("kelly_fraction_suggested"),
-                "lot_vs_kelly_ratio": rec.get("lot_vs_kelly_ratio"),
-                "sample_size": rec.get("sample_size", 0),
-            })
+            results.append(
+                {
+                    "strategy": rec.get("strategy"),
+                    "symbol": rec.get("symbol"),
+                    "avg_hold_winners": rec.get("avg_hold_winners"),
+                    "avg_hold_losers": rec.get("avg_hold_losers"),
+                    "disposition_ratio": rec.get("disposition_ratio"),
+                    "lot_sizing_variance": rec.get("actual_lot_variance"),
+                    "kelly_fraction_suggested": rec.get("kelly_fraction_suggested"),
+                    "lot_vs_kelly_ratio": rec.get("lot_vs_kelly_ratio"),
+                    "sample_size": rec.get("sample_size", 0),
+                }
+            )
 
         return {
             "status": "ok",
@@ -1051,12 +1058,18 @@ async def owm_plan(req: CreatePlanRequest):
         try:
             trigger_cond_parsed = json.loads(req.trigger_condition)
         except (json.JSONDecodeError, TypeError):
-            raise HTTPException(status_code=400, detail=f"trigger_condition must be valid JSON, got: {req.trigger_condition}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"trigger_condition must be valid JSON, got: {req.trigger_condition}",
+            )
 
         try:
             planned_act_parsed = json.loads(req.planned_action)
         except (json.JSONDecodeError, TypeError):
-            raise HTTPException(status_code=400, detail=f"planned_action must be valid JSON, got: {req.planned_action}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"planned_action must be valid JSON, got: {req.planned_action}",
+            )
 
         data = {
             "id": plan_id,
@@ -1193,6 +1206,7 @@ async def owm_migrate():
 
 class EvolutionDiscoverRequest(BaseModel):
     """Request for POST /evolution/discover"""
+
     symbol: str
     timeframe: str = "1h"
     count: int = 5
@@ -1202,6 +1216,7 @@ class EvolutionDiscoverRequest(BaseModel):
 
 class EvolutionBacktestRequest(BaseModel):
     """Request for POST /evolution/backtest"""
+
     pattern_dict: Dict[str, Any]
     symbol: str = "BTCUSDT"
     timeframe: str = "1h"
@@ -1210,6 +1225,7 @@ class EvolutionBacktestRequest(BaseModel):
 
 class EvolutionEvolveRequest(BaseModel):
     """Request for POST /evolution/evolve"""
+
     symbol: str
     timeframe: str = "1h"
     generations: int = 3
@@ -1226,8 +1242,12 @@ async def evolution_discover(req: EvolutionDiscoverRequest):
 
         llm = AnthropicClient()
         return await discover_patterns(
-            req.symbol, req.timeframe, req.count, req.temperature,
-            llm=llm, days=req.days,
+            req.symbol,
+            req.timeframe,
+            req.count,
+            req.temperature,
+            llm=llm,
+            days=req.days,
         )
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -1241,7 +1261,10 @@ async def evolution_backtest(req: EvolutionBacktestRequest):
         from .evolution.mcp_tools import run_backtest
 
         return await run_backtest(
-            req.pattern_dict, req.symbol, req.timeframe, req.days,
+            req.pattern_dict,
+            req.symbol,
+            req.timeframe,
+            req.days,
         )
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -1257,8 +1280,12 @@ async def evolution_evolve(req: EvolutionEvolveRequest):
 
         llm = AnthropicClient()
         return await evolve_strategy(
-            req.symbol, req.timeframe, req.generations, req.population_size,
-            llm=llm, days=req.days,
+            req.symbol,
+            req.timeframe,
+            req.generations,
+            req.population_size,
+            llm=llm,
+            days=req.days,
         )
     except Exception as e:
         logger.error(f"Request failed: {e}", exc_info=True)
@@ -1298,10 +1325,7 @@ def _build_tdr(trade: Dict[str, Any], database=None) -> TradingDecisionRecord:
     beliefs = []
     try:
         sem = database.query_semantic(strategy=trade.get("strategy"), limit=5)
-        beliefs = [
-            f"{b.get('proposition', '')} (conf={b.get('confidence', 0):.2f})"
-            for b in sem
-        ]
+        beliefs = [f"{b.get('proposition', '')} (conf={b.get('confidence', 0):.2f})" for b in sem]
     except Exception:
         pass
 
@@ -1445,8 +1469,18 @@ _dashboard_dist = Path(__file__).parent.parent.parent / "dashboard" / "dist"
 
 # API prefixes that must NOT be caught by the SPA catch-all
 _API_PREFIXES = (
-    "audit/", "dashboard/", "trade/", "state/", "reflect/", "mt5/", "risk/",
-    "patterns/", "adjustments/", "owm/", "evolution/", "health",
+    "audit/",
+    "dashboard/",
+    "trade/",
+    "state/",
+    "reflect/",
+    "mt5/",
+    "risk/",
+    "patterns/",
+    "adjustments/",
+    "owm/",
+    "evolution/",
+    "health",
 )
 
 if _dashboard_dist.exists():
@@ -1473,7 +1507,9 @@ if _dashboard_dist.exists():
 def main():
     """Entry point for `tradememory` CLI command."""
     import uvicorn
+
     host = os.environ.get("HOST", "127.0.0.1")  # default local-only, set HOST=0.0.0.0 for network
+    print_zerog_startup_notice()
     uvicorn.run(app, host=host, port=8000)
 
 
