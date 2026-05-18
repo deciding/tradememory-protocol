@@ -16,20 +16,74 @@ ZEROG_REQUIRED_ENV_VARS = [
     "ZEROG_INDEXER_RPC",
 ]
 
+ZEROG_TO_OG_ENV_ALIASES = {
+    "ZEROG_TESTNET_RPC_URL": "OG_BLOCKCHAIN_RPC",
+    "ZEROG_TESTNET_PRIVATE_KEY": "OG_PRIVATE_KEY",
+    "ZEROG_INDEXER_RPC": "OG_INDEXER_RPC",
+}
+
 
 @dataclass(frozen=True)
 class ZerogStatus:
     enabled: bool
     reason: str
     missing: list[str]
+    sdk_ready: bool
+    og_env: dict[str, str]
+
+
+def sync_zerog_env_to_og_env() -> dict[str, str]:
+    """Populate legacy OG_* env vars from canonical ZEROG_* values."""
+    synced = {}
+    for zerog_name, og_name in ZEROG_TO_OG_ENV_ALIASES.items():
+        value = os.getenv(zerog_name)
+        if value:
+            os.environ[og_name] = value
+            synced[og_name] = value
+
+    if synced:
+        os.environ["OG_ENABLED"] = "true"
+        synced["OG_ENABLED"] = "true"
+
+    return synced
+
+
+def _zerog_sdk_ready() -> bool:
+    """Return whether the 0G runtime dependencies are import-ready."""
+    return Indexer is not None and ZgFile is not None and Account is not None
 
 
 def get_zerog_status() -> ZerogStatus:
     """Return whether the optional 0G integration is fully configured."""
     missing = [name for name in ZEROG_REQUIRED_ENV_VARS if not os.getenv(name)]
+    synced_og_env = sync_zerog_env_to_og_env()
+    sdk_ready = _zerog_sdk_ready()
+
     if missing:
-        return ZerogStatus(enabled=False, reason="missing_env", missing=missing)
-    return ZerogStatus(enabled=True, reason="configured", missing=[])
+        return ZerogStatus(
+            enabled=False,
+            reason="missing_env",
+            missing=missing,
+            sdk_ready=sdk_ready,
+            og_env=synced_og_env,
+        )
+
+    if not sdk_ready:
+        return ZerogStatus(
+            enabled=False,
+            reason="sdk_unavailable",
+            missing=[],
+            sdk_ready=False,
+            og_env=synced_og_env,
+        )
+
+    return ZerogStatus(
+        enabled=True,
+        reason="configured",
+        missing=[],
+        sdk_ready=True,
+        og_env=synced_og_env,
+    )
 
 
 def print_zerog_startup_notice(logger: logging.Logger | None = None) -> ZerogStatus:
@@ -37,6 +91,8 @@ def print_zerog_startup_notice(logger: logging.Logger | None = None) -> ZerogSta
     status = get_zerog_status()
     if status.enabled:
         message = "0G Storage enabled (SQLite + 0G dual-write)"
+    elif status.reason == "sdk_unavailable":
+        message = "0G Storage disabled (SDK/runtime unavailable)"
     else:
         missing = ", ".join(status.missing) or "none"
         message = f"0G Storage disabled ({status.reason}); missing: {missing}"
@@ -92,10 +148,25 @@ class OgStorage:
         blockchain_rpc: str = None,
         indexer_rpc: str = None,
     ):
-        self._enabled = enabled or os.environ.get("OG_ENABLED", "").lower() == "true"
-        self._private_key = private_key or os.environ.get("OG_PRIVATE_KEY")
-        self._blockchain_rpc = blockchain_rpc or os.environ.get("OG_BLOCKCHAIN_RPC")
-        self._indexer_rpc = indexer_rpc or os.environ.get("OG_INDEXER_RPC")
+        if enabled is None:
+            self._enabled = os.environ.get("OG_ENABLED", "").lower() == "true"
+        else:
+            self._enabled = enabled
+
+        if private_key is None:
+            self._private_key = os.environ.get("OG_PRIVATE_KEY")
+        else:
+            self._private_key = private_key
+
+        if blockchain_rpc is None:
+            self._blockchain_rpc = os.environ.get("OG_BLOCKCHAIN_RPC")
+        else:
+            self._blockchain_rpc = blockchain_rpc
+
+        if indexer_rpc is None:
+            self._indexer_rpc = os.environ.get("OG_INDEXER_RPC")
+        else:
+            self._indexer_rpc = indexer_rpc
 
     def is_available(self) -> bool:
         """Check if 0G storage is configured and available."""
