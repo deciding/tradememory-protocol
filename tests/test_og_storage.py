@@ -33,11 +33,7 @@ def test_config_status_disabled_when_missing_env(monkeypatch):
     assert "ZEROG_INDEXER_RPC" in status.missing
 
 
-def test_config_status_enabled_when_all_env_present_and_aliases_synced(monkeypatch):
-    monkeypatch.delenv("OG_ENABLED", raising=False)
-    monkeypatch.delenv("OG_BLOCKCHAIN_RPC", raising=False)
-    monkeypatch.delenv("OG_PRIVATE_KEY", raising=False)
-    monkeypatch.delenv("OG_INDEXER_RPC", raising=False)
+def test_get_zerog_status_does_not_mutate_runtime_env(monkeypatch):
     monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://evmrpc-testnet.0g.ai")
     monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
     monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
@@ -50,16 +46,38 @@ def test_config_status_enabled_when_all_env_present_and_aliases_synced(monkeypat
     monkeypatch.setattr(og_module, "Account", object())
 
     status = get_zerog_status()
-    storage = OgStorage(enabled=True)
+    storage = OgStorage()
 
     assert status.enabled is True
     assert status.reason == "configured"
     assert status.missing == []
     assert status.sdk_ready is True
-    assert status.og_env["OG_ENABLED"] == "true"
-    assert status.og_env["OG_BLOCKCHAIN_RPC"] == "https://evmrpc-testnet.0g.ai"
-    assert status.og_env["OG_PRIVATE_KEY"] == "0xabc"
-    assert status.og_env["OG_INDEXER_RPC"] == "https://indexer-storage-testnet-turbo.0g.ai"
+    assert status.og_env == {}
+    assert storage._enabled is False
+    assert storage._blockchain_rpc is None
+    assert storage._private_key is None
+    assert storage._indexer_rpc is None
+
+
+def test_initialize_zerog_runtime_env_enables_default_og_storage_path(monkeypatch):
+    monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://evmrpc-testnet.0g.ai")
+    monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
+    monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
+
+    import tradememory.og_storage as og_module
+    from tradememory.og_storage import OgStorage, initialize_zerog_runtime_env
+
+    monkeypatch.setattr(og_module, "Indexer", object())
+    monkeypatch.setattr(og_module, "ZgFile", object())
+    monkeypatch.setattr(og_module, "Account", object())
+
+    synced = initialize_zerog_runtime_env()
+    storage = OgStorage()
+
+    assert synced["OG_ENABLED"] == "true"
+    assert synced["OG_BLOCKCHAIN_RPC"] == "https://evmrpc-testnet.0g.ai"
+    assert synced["OG_PRIVATE_KEY"] == "0xabc"
+    assert synced["OG_INDEXER_RPC"] == "https://indexer-storage-testnet-turbo.0g.ai"
     assert storage._enabled is True
     assert storage._blockchain_rpc == "https://evmrpc-testnet.0g.ai"
     assert storage._private_key == "0xabc"

@@ -32,7 +32,7 @@ class ZerogStatus:
     og_env: dict[str, str]
 
 
-def sync_zerog_env_to_og_env() -> dict[str, str]:
+def initialize_zerog_runtime_env() -> dict[str, str]:
     """Populate legacy OG_* env vars from canonical ZEROG_* values."""
     synced = {}
     for zerog_name, og_name in ZEROG_TO_OG_ENV_ALIASES.items():
@@ -56,7 +56,6 @@ def _zerog_sdk_ready() -> bool:
 def get_zerog_status() -> ZerogStatus:
     """Return whether the optional 0G integration is fully configured."""
     missing = [name for name in ZEROG_REQUIRED_ENV_VARS if not os.getenv(name)]
-    synced_og_env = sync_zerog_env_to_og_env()
     sdk_ready = _zerog_sdk_ready()
 
     if missing:
@@ -65,7 +64,7 @@ def get_zerog_status() -> ZerogStatus:
             reason="missing_env",
             missing=missing,
             sdk_ready=sdk_ready,
-            og_env=synced_og_env,
+            og_env={},
         )
 
     if not sdk_ready:
@@ -74,7 +73,7 @@ def get_zerog_status() -> ZerogStatus:
             reason="sdk_unavailable",
             missing=[],
             sdk_ready=False,
-            og_env=synced_og_env,
+            og_env={},
         )
 
     return ZerogStatus(
@@ -82,7 +81,7 @@ def get_zerog_status() -> ZerogStatus:
         reason="configured",
         missing=[],
         sdk_ready=True,
-        og_env=synced_og_env,
+        og_env={},
     )
 
 
