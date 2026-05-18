@@ -78,6 +78,26 @@ docker compose up -d
 
 **Full walkthrough:** [Getting Started](docs/GETTING_STARTED.md) (Trader Track + Developer Track)
 
+## Optional 0G Storage
+
+TradeMemory uses SQLite by default. Optional 0G storage is enabled only when all three `ZEROG_*` env vars are set:
+
+- `ZEROG_TESTNET_RPC_URL`
+- `ZEROG_TESTNET_PRIVATE_KEY`
+- `ZEROG_INDEXER_RPC`
+
+Smoke test with 0G enabled:
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/test_zerog_l1_l2_l3.py
+```
+
+Smoke test with 0G disabled:
+
+```bash
+ZEROG_SKIP_DOTENV=true PYTHONPATH=src .venv/bin/python scripts/test_zerog_l1_l2_l3.py
+```
+
 ## Who uses TradeMemory
 
 | | US Equity Trader | Forex EA System | Compliance Team |
