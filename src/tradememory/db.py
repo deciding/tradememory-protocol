@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .exceptions import TradeMemoryDBError
+from .og_storage import OgStorage, get_zerog_status
 
 logger = logging.getLogger(__name__)
 
@@ -777,16 +778,13 @@ class Database:
 
     def insert_episodic(self, data: Dict[str, Any]) -> bool:
         """Insert an episodic memory record."""
-        import os
-
         og_hash = None
         og_tx_hash = None
 
         # Try to upload to 0G storage
-        if os.environ.get("OG_ENABLED", "").lower() == "true":
+        status = get_zerog_status()
+        if status.enabled:
             try:
-                from .og_storage import OgStorage
-
                 og_storage = OgStorage()
                 result = og_storage.upload(
                     {
@@ -921,16 +919,13 @@ class Database:
 
     def insert_semantic(self, data: Dict[str, Any]) -> bool:
         """Insert a semantic memory record."""
-        import os
-
         og_hash = None
         og_tx_hash = None
 
         # Try to upload to 0G storage
-        if os.environ.get("OG_ENABLED", "").lower() == "true":
+        status = get_zerog_status()
+        if status.enabled:
             try:
-                from .og_storage import OgStorage
-
                 og_storage = OgStorage()
                 result = og_storage.upload(
                     {
@@ -1082,15 +1077,12 @@ class Database:
 
     def upsert_procedural(self, data: Dict[str, Any]) -> bool:
         """Insert or replace a procedural memory record."""
-        import os
-
         og_hash = None
         og_tx_hash = None
 
-        if os.environ.get("OG_ENABLED", "").lower() == "true":
+        status = get_zerog_status()
+        if status.enabled:
             try:
-                from .og_storage import OgStorage
-
                 og_storage = OgStorage()
                 result = og_storage.upload(
                     {
