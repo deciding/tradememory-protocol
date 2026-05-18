@@ -1,5 +1,6 @@
 """0G Storage integration for TradeMemory Protocol."""
 
+from dataclasses import dataclass
 import json
 import logging
 import os
@@ -8,6 +9,44 @@ import types
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+ZEROG_REQUIRED_ENV_VARS = [
+    "ZEROG_TESTNET_RPC_URL",
+    "ZEROG_TESTNET_PRIVATE_KEY",
+    "ZEROG_INDEXER_RPC",
+]
+
+
+@dataclass(frozen=True)
+class ZerogStatus:
+    enabled: bool
+    reason: str
+    missing: list[str]
+
+
+def get_zerog_status() -> ZerogStatus:
+    """Return whether the optional 0G integration is fully configured."""
+    missing = [name for name in ZEROG_REQUIRED_ENV_VARS if not os.getenv(name)]
+    if missing:
+        return ZerogStatus(enabled=False, reason="missing_env", missing=missing)
+    return ZerogStatus(enabled=True, reason="configured", missing=[])
+
+
+def print_zerog_startup_notice(logger: logging.Logger | None = None) -> ZerogStatus:
+    """Emit a clear startup message describing 0G availability."""
+    status = get_zerog_status()
+    if status.enabled:
+        message = "0G Storage enabled (SQLite + 0G dual-write)"
+    else:
+        missing = ", ".join(status.missing) or "none"
+        message = f"0G Storage disabled ({status.reason}); missing: {missing}"
+
+    if logger is None:
+        print(message)
+    else:
+        logger.info(message)
+
+    return status
 
 
 def _install_zerog_config_shim() -> None:

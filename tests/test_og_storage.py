@@ -3,6 +3,66 @@ import sys
 from unittest.mock import patch, MagicMock
 
 
+def test_config_status_disabled_when_missing_env(monkeypatch):
+    monkeypatch.delenv("ZEROG_TESTNET_RPC_URL", raising=False)
+    monkeypatch.delenv("ZEROG_TESTNET_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("ZEROG_INDEXER_RPC", raising=False)
+
+    from tradememory.og_storage import get_zerog_status
+
+    status = get_zerog_status()
+
+    assert status.enabled is False
+    assert status.reason == "missing_env"
+    assert "ZEROG_TESTNET_RPC_URL" in status.missing
+    assert "ZEROG_TESTNET_PRIVATE_KEY" in status.missing
+    assert "ZEROG_INDEXER_RPC" in status.missing
+
+
+def test_config_status_enabled_when_all_env_present(monkeypatch):
+    monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://evmrpc-testnet.0g.ai")
+    monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
+    monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
+
+    from tradememory.og_storage import get_zerog_status
+
+    status = get_zerog_status()
+
+    assert status.enabled is True
+    assert status.reason == "configured"
+    assert status.missing == []
+
+
+def test_print_zerog_startup_notice_prints_clear_disabled_message(monkeypatch, capsys):
+    monkeypatch.delenv("ZEROG_TESTNET_RPC_URL", raising=False)
+    monkeypatch.delenv("ZEROG_TESTNET_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("ZEROG_INDEXER_RPC", raising=False)
+
+    from tradememory.og_storage import print_zerog_startup_notice
+
+    status = print_zerog_startup_notice()
+    captured = capsys.readouterr()
+
+    assert status.enabled is False
+    assert "0G Storage disabled" in captured.out
+    assert "ZEROG_TESTNET_RPC_URL" in captured.out
+
+
+def test_print_zerog_startup_notice_logs_enabled_message(monkeypatch):
+    monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://evmrpc-testnet.0g.ai")
+    monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
+    monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
+
+    from tradememory.og_storage import print_zerog_startup_notice
+
+    mock_logger = MagicMock()
+    status = print_zerog_startup_notice(logger=mock_logger)
+
+    assert status.enabled is True
+    mock_logger.info.assert_called_once()
+    assert "0G Storage enabled" in mock_logger.info.call_args.args[0]
+
+
 class TestOgStorage:
     def test_initialization_defaults(self):
         from tradememory.og_storage import OgStorage
