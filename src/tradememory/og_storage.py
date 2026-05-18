@@ -17,6 +17,18 @@ ZEROG_REQUIRED_ENV_VARS = [
 ]
 
 
+def initialize_zerog_runtime_env() -> bool:
+    """Mirror ZEROG_* config into the OG_* runtime env expected by OgStorage."""
+    if not get_zerog_status().enabled:
+        return False
+
+    os.environ["OG_ENABLED"] = "true"
+    os.environ["OG_PRIVATE_KEY"] = os.environ["ZEROG_TESTNET_PRIVATE_KEY"]
+    os.environ["OG_BLOCKCHAIN_RPC"] = os.environ["ZEROG_TESTNET_RPC_URL"]
+    os.environ["OG_INDEXER_RPC"] = os.environ["ZEROG_INDEXER_RPC"]
+    return True
+
+
 @dataclass(frozen=True)
 class ZerogStatus:
     enabled: bool

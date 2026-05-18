@@ -6,6 +6,7 @@ Tests all 5 tables: episodic, semantic, procedural, affective, prospective.
 import pytest
 import tempfile
 import json
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -130,76 +131,165 @@ class TestEpisodicMemory:
         results = db.query_episodic(limit=3)
         assert len(results) == 3
 
-    def test_insert_skips_zerog_when_disabled(self, monkeypatch, db):
-        monkeypatch.setenv("OG_ENABLED", "true")
+    @pytest.mark.parametrize(
+        ("write_method", "query_method", "make_data", "memory_type"),
+        [
+            ("insert_episodic", "query_episodic", lambda: _make_episodic(id="E-010"), "episodic"),
+            (
+                "insert_semantic",
+                "query_semantic",
+                lambda: {
+                    "id": "S-010",
+                    "proposition": "VB works in trending markets",
+                    "alpha": 1.0,
+                    "beta": 1.0,
+                    "sample_size": 0,
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "regime": "trending_up",
+                    "volatility_regime": "high",
+                    "validity_conditions": {"atr_d1_min": 100.0},
+                    "last_confirmed": None,
+                    "last_contradicted": None,
+                    "source": "induced",
+                },
+                "semantic",
+            ),
+            (
+                "upsert_procedural",
+                "query_procedural",
+                lambda: {
+                    "id": "P-010",
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "behavior_type": "execution",
+                    "sample_size": 50,
+                    "avg_hold_winners": 3600.0,
+                    "avg_hold_losers": 7200.0,
+                    "disposition_ratio": 2.0,
+                    "actual_lot_mean": 0.05,
+                    "actual_lot_variance": 0.001,
+                    "kelly_fraction_suggested": 0.08,
+                    "lot_vs_kelly_ratio": 0.625,
+                },
+                "procedural",
+            ),
+        ],
+    )
+    def test_zerog_write_skipped_when_disabled(
+        self, monkeypatch, db, write_method, query_method, make_data, memory_type
+    ):
         monkeypatch.delenv("ZEROG_TESTNET_RPC_URL", raising=False)
         monkeypatch.delenv("ZEROG_TESTNET_PRIVATE_KEY", raising=False)
         monkeypatch.delenv("ZEROG_INDEXER_RPC", raising=False)
 
         calls = {"init": 0, "upload": 0}
 
+        def fake_init():
+            calls["init"] += 1
+
         class FakeOgStorage:
             def __init__(self, *args, **kwargs):
-                calls["init"] += 1
+                calls["upload"] += 1
 
             def upload(self, *args, **kwargs):
-                calls["upload"] += 1
                 return ("og-root", "og-tx")
 
-        class FakeStatus:
-            enabled = False
-            reason = "missing_env"
-            missing = [
-                "ZEROG_TESTNET_RPC_URL",
-                "ZEROG_TESTNET_PRIVATE_KEY",
-                "ZEROG_INDEXER_RPC",
-            ]
-
+        monkeypatch.setattr("tradememory.db.initialize_zerog_runtime_env", fake_init, raising=False)
         monkeypatch.setattr("tradememory.db.OgStorage", FakeOgStorage)
-        monkeypatch.setattr("tradememory.db.get_zerog_status", lambda: FakeStatus())
 
-        data = _make_episodic(id="E-010")
-        assert db.insert_episodic(data) is True
+        assert getattr(db, write_method)(make_data()) is True
         assert calls == {"init": 0, "upload": 0}
 
-        results = db.query_episodic()
+        results = getattr(db, query_method)()
         assert len(results) == 1
         assert results[0]["og_hash"] is None
         assert results[0]["og_tx_hash"] is None
 
-    def test_insert_uses_zerog_when_enabled(self, monkeypatch, db):
-        monkeypatch.setenv("OG_ENABLED", "true")
+    @pytest.mark.parametrize(
+        ("write_method", "query_method", "make_data", "memory_type"),
+        [
+            ("insert_episodic", "query_episodic", lambda: _make_episodic(id="E-020"), "episodic"),
+            (
+                "insert_semantic",
+                "query_semantic",
+                lambda: {
+                    "id": "S-020",
+                    "proposition": "VB works in trending markets",
+                    "alpha": 1.0,
+                    "beta": 1.0,
+                    "sample_size": 0,
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "regime": "trending_up",
+                    "volatility_regime": "high",
+                    "validity_conditions": {"atr_d1_min": 100.0},
+                    "last_confirmed": None,
+                    "last_contradicted": None,
+                    "source": "induced",
+                },
+                "semantic",
+            ),
+            (
+                "upsert_procedural",
+                "query_procedural",
+                lambda: {
+                    "id": "P-020",
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "behavior_type": "execution",
+                    "sample_size": 50,
+                    "avg_hold_winners": 3600.0,
+                    "avg_hold_losers": 7200.0,
+                    "disposition_ratio": 2.0,
+                    "actual_lot_mean": 0.05,
+                    "actual_lot_variance": 0.001,
+                    "kelly_fraction_suggested": 0.08,
+                    "lot_vs_kelly_ratio": 0.625,
+                },
+                "procedural",
+            ),
+        ],
+    )
+    def test_zerog_write_uses_runtime_env_when_enabled(
+        self, monkeypatch, db, write_method, query_method, make_data, memory_type
+    ):
         monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://rpc.example")
         monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc123")
         monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer.example")
 
         calls = {"init": 0, "upload": 0}
 
+        def fake_init():
+            calls["init"] += 1
+            monkeypatch.setenv("OG_ENABLED", "true")
+            monkeypatch.setenv("OG_PRIVATE_KEY", "0xabc123")
+            monkeypatch.setenv("OG_BLOCKCHAIN_RPC", "https://rpc.example")
+            monkeypatch.setenv("OG_INDEXER_RPC", "https://indexer.example")
+            return True
+
         class FakeOgStorage:
             def __init__(self, *args, **kwargs):
-                calls["init"] += 1
+                calls["upload"] += 1
 
             def upload(self, payload, network="testnet"):
-                calls["upload"] += 1
-                assert payload["type"] == "episodic"
-                return ("og-root", "og-tx")
+                assert os.environ["OG_ENABLED"] == "true"
+                assert os.environ["OG_PRIVATE_KEY"] == "0xabc123"
+                assert os.environ["OG_BLOCKCHAIN_RPC"] == "https://rpc.example"
+                assert os.environ["OG_INDEXER_RPC"] == "https://indexer.example"
+                assert payload["type"] == memory_type
+                return (f"{memory_type}-og-root", f"{memory_type}-og-tx")
 
-        class FakeStatus:
-            enabled = True
-            reason = "configured"
-            missing = []
-
+        monkeypatch.setattr("tradememory.db.initialize_zerog_runtime_env", fake_init, raising=False)
         monkeypatch.setattr("tradememory.db.OgStorage", FakeOgStorage)
-        monkeypatch.setattr("tradememory.db.get_zerog_status", lambda: FakeStatus())
 
-        data = _make_episodic(id="E-011")
-        assert db.insert_episodic(data) is True
+        assert getattr(db, write_method)(make_data()) is True
         assert calls == {"init": 1, "upload": 1}
 
-        results = db.query_episodic()
+        results = getattr(db, query_method)()
         assert len(results) == 1
-        assert results[0]["og_hash"] == "og-root"
-        assert results[0]["og_tx_hash"] == "og-tx"
+        assert results[0]["og_hash"] == f"{memory_type}-og-root"
+        assert results[0]["og_tx_hash"] == f"{memory_type}-og-tx"
 
 
 # ========== Semantic Memory Tests ==========

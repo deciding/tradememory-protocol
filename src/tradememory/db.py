@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .exceptions import TradeMemoryDBError
-from .og_storage import OgStorage, get_zerog_status
+from .og_storage import OgStorage, initialize_zerog_runtime_env, get_zerog_status
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,26 @@ class Database:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
+
+    def _upload_zerog_memory(
+        self, memory_type: str, payload: Dict[str, Any]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Upload a memory payload to 0G when configured."""
+        status = get_zerog_status()
+        if not status.enabled:
+            return None, None
+
+        try:
+            if not initialize_zerog_runtime_env():
+                return None, None
+            result = OgStorage().upload({"type": memory_type, **payload})
+            if not result:
+                return None, None
+            if isinstance(result, tuple):
+                return result[0], result[1] if len(result) > 1 else None
+            return result, None
+        except Exception:
+            return None, None
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get database connection"""
@@ -778,37 +798,20 @@ class Database:
 
     def insert_episodic(self, data: Dict[str, Any]) -> bool:
         """Insert an episodic memory record."""
-        og_hash = None
-        og_tx_hash = None
-
-        # Try to upload to 0G storage
-        status = get_zerog_status()
-        if status.enabled:
-            try:
-                og_storage = OgStorage()
-                result = og_storage.upload(
-                    {
-                        "type": "episodic",
-                        "id": data.get("id"),
-                        "timestamp": data.get("timestamp"),
-                        "context_json": data.get("context_json"),
-                        "strategy": data.get("strategy"),
-                        "direction": data.get("direction"),
-                        "entry_price": data.get("entry_price"),
-                        "exit_price": data.get("exit_price"),
-                        "pnl": data.get("pnl"),
-                        "pnl_r": data.get("pnl_r"),
-                    }
-                )
-                if result:
-                    if isinstance(result, tuple):
-                        og_hash = result[0]
-                        og_tx_hash = result[1] if len(result) > 1 else None
-                    else:
-                        og_hash = result
-            except Exception:
-                pass  # Don't block on 0G failure
-
+        og_hash, og_tx_hash = self._upload_zerog_memory(
+            "episodic",
+            {
+                "id": data.get("id"),
+                "timestamp": data.get("timestamp"),
+                "context_json": data.get("context_json"),
+                "strategy": data.get("strategy"),
+                "direction": data.get("direction"),
+                "entry_price": data.get("entry_price"),
+                "exit_price": data.get("exit_price"),
+                "pnl": data.get("pnl"),
+                "pnl_r": data.get("pnl_r"),
+            },
+        )
         data["og_hash"] = og_hash
         data["og_tx_hash"] = og_tx_hash
 
@@ -919,37 +922,20 @@ class Database:
 
     def insert_semantic(self, data: Dict[str, Any]) -> bool:
         """Insert a semantic memory record."""
-        og_hash = None
-        og_tx_hash = None
-
-        # Try to upload to 0G storage
-        status = get_zerog_status()
-        if status.enabled:
-            try:
-                og_storage = OgStorage()
-                result = og_storage.upload(
-                    {
-                        "type": "semantic",
-                        "id": data.get("id"),
-                        "proposition": data.get("proposition"),
-                        "alpha": data.get("alpha", 1.0),
-                        "beta": data.get("beta", 1.0),
-                        "sample_size": data.get("sample_size", 0),
-                        "strategy": data.get("strategy"),
-                        "symbol": data.get("symbol"),
-                        "regime": data.get("regime"),
-                        "validity_conditions": data.get("validity_conditions"),
-                    }
-                )
-                if result:
-                    if isinstance(result, tuple):
-                        og_hash = result[0]
-                        og_tx_hash = result[1] if len(result) > 1 else None
-                    else:
-                        og_hash = result
-            except Exception:
-                pass  # Don't block on 0G failure
-
+        og_hash, og_tx_hash = self._upload_zerog_memory(
+            "semantic",
+            {
+                "id": data.get("id"),
+                "proposition": data.get("proposition"),
+                "alpha": data.get("alpha", 1.0),
+                "beta": data.get("beta", 1.0),
+                "sample_size": data.get("sample_size", 0),
+                "strategy": data.get("strategy"),
+                "symbol": data.get("symbol"),
+                "regime": data.get("regime"),
+                "validity_conditions": data.get("validity_conditions"),
+            },
+        )
         data["og_hash"] = og_hash
         data["og_tx_hash"] = og_tx_hash
 
@@ -1077,39 +1063,23 @@ class Database:
 
     def upsert_procedural(self, data: Dict[str, Any]) -> bool:
         """Insert or replace a procedural memory record."""
-        og_hash = None
-        og_tx_hash = None
-
-        status = get_zerog_status()
-        if status.enabled:
-            try:
-                og_storage = OgStorage()
-                result = og_storage.upload(
-                    {
-                        "type": "procedural",
-                        "id": data.get("id"),
-                        "strategy": data.get("strategy"),
-                        "symbol": data.get("symbol"),
-                        "behavior_type": data.get("behavior_type"),
-                        "sample_size": data.get("sample_size"),
-                        "avg_hold_winners": data.get("avg_hold_winners"),
-                        "avg_hold_losers": data.get("avg_hold_losers"),
-                        "disposition_ratio": data.get("disposition_ratio"),
-                        "actual_lot_mean": data.get("actual_lot_mean"),
-                        "actual_lot_variance": data.get("actual_lot_variance"),
-                        "kelly_fraction_suggested": data.get("kelly_fraction_suggested"),
-                        "lot_vs_kelly_ratio": data.get("lot_vs_kelly_ratio"),
-                    }
-                )
-                if result:
-                    if isinstance(result, tuple):
-                        og_hash = result[0]
-                        og_tx_hash = result[1] if len(result) > 1 else None
-                    else:
-                        og_hash = result
-            except Exception:
-                pass
-
+        og_hash, og_tx_hash = self._upload_zerog_memory(
+            "procedural",
+            {
+                "id": data.get("id"),
+                "strategy": data.get("strategy"),
+                "symbol": data.get("symbol"),
+                "behavior_type": data.get("behavior_type"),
+                "sample_size": data.get("sample_size"),
+                "avg_hold_winners": data.get("avg_hold_winners"),
+                "avg_hold_losers": data.get("avg_hold_losers"),
+                "disposition_ratio": data.get("disposition_ratio"),
+                "actual_lot_mean": data.get("actual_lot_mean"),
+                "actual_lot_variance": data.get("actual_lot_variance"),
+                "kelly_fraction_suggested": data.get("kelly_fraction_suggested"),
+                "lot_vs_kelly_ratio": data.get("lot_vs_kelly_ratio"),
+            },
+        )
         data["og_hash"] = og_hash
         data["og_tx_hash"] = og_tx_hash
 
