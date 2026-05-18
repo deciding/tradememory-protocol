@@ -2,6 +2,8 @@
 
 import click
 
+from .og_storage import print_zerog_startup_notice
+
 
 @click.group()
 def cli():
@@ -13,6 +15,7 @@ def cli():
 def setup():
     """Interactive first-time setup wizard."""
     from .onboarding.setup_wizard import run_setup
+
     run_setup()
 
 
@@ -21,6 +24,8 @@ def setup():
 def doctor(full):
     """Check system health."""
     from .onboarding.doctor import run_doctor, print_results
+
+    print_zerog_startup_notice()
     results = run_doctor(full=full)
     print_results(results)
 
@@ -30,6 +35,7 @@ def doctor(full):
 def config(platform):
     """Show configuration for your AI platform."""
     from .onboarding.platforms import show_config_menu
+
     show_config_menu(platform)
 
 
@@ -38,6 +44,8 @@ def config(platform):
 def demo(fast):
     """Run interactive demo with 30 simulated trades (no API key needed)."""
     from .demo import main as demo_main
+
+    print_zerog_startup_notice()
     demo_main(fast=fast)
 
 

@@ -6,6 +6,7 @@ Tests all 5 tables: episodic, semantic, procedural, affective, prospective.
 import pytest
 import tempfile
 import json
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -15,6 +16,7 @@ from tradememory.exceptions import TradeMemoryDBError
 
 # ========== Fixtures ==========
 
+
 @pytest.fixture
 def db():
     """Create a temporary database for testing."""
@@ -23,9 +25,16 @@ def db():
         yield Database(str(db_path))
 
 
-def _make_episodic(id="E-001", strategy="VolBreakout", direction="long",
-                   entry_price=5175.0, pnl=100.0, pnl_r=1.5,
-                   regime="trending_up", session="london"):
+def _make_episodic(
+    id="E-001",
+    strategy="VolBreakout",
+    direction="long",
+    entry_price=5175.0,
+    pnl=100.0,
+    pnl_r=1.5,
+    regime="trending_up",
+    session="london",
+):
     return {
         "id": id,
         "timestamp": "2026-03-02T10:00:00",
@@ -55,8 +64,8 @@ def _make_episodic(id="E-001", strategy="VolBreakout", direction="long",
 
 # ========== Episodic Memory Tests ==========
 
-class TestEpisodicMemory:
 
+class TestEpisodicMemory:
     def test_insert_and_query(self, db):
         data = _make_episodic()
         assert db.insert_episodic(data) is True
@@ -122,13 +131,178 @@ class TestEpisodicMemory:
         results = db.query_episodic(limit=3)
         assert len(results) == 3
 
+    @pytest.mark.parametrize(
+        ("write_method", "query_method", "make_data", "memory_type"),
+        [
+            ("insert_episodic", "query_episodic", lambda: _make_episodic(id="E-010"), "episodic"),
+            (
+                "insert_semantic",
+                "query_semantic",
+                lambda: {
+                    "id": "S-010",
+                    "proposition": "VB works in trending markets",
+                    "alpha": 1.0,
+                    "beta": 1.0,
+                    "sample_size": 0,
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "regime": "trending_up",
+                    "volatility_regime": "high",
+                    "validity_conditions": {"atr_d1_min": 100.0},
+                    "last_confirmed": None,
+                    "last_contradicted": None,
+                    "source": "induced",
+                },
+                "semantic",
+            ),
+            (
+                "upsert_procedural",
+                "query_procedural",
+                lambda: {
+                    "id": "P-010",
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "behavior_type": "execution",
+                    "sample_size": 50,
+                    "avg_hold_winners": 3600.0,
+                    "avg_hold_losers": 7200.0,
+                    "disposition_ratio": 2.0,
+                    "actual_lot_mean": 0.05,
+                    "actual_lot_variance": 0.001,
+                    "kelly_fraction_suggested": 0.08,
+                    "lot_vs_kelly_ratio": 0.625,
+                },
+                "procedural",
+            ),
+        ],
+    )
+    def test_zerog_write_skipped_when_disabled(
+        self, monkeypatch, db, write_method, query_method, make_data, memory_type
+    ):
+        monkeypatch.delenv("ZEROG_TESTNET_RPC_URL", raising=False)
+        monkeypatch.delenv("ZEROG_TESTNET_PRIVATE_KEY", raising=False)
+        monkeypatch.delenv("ZEROG_INDEXER_RPC", raising=False)
+
+        calls = {"init": 0, "upload": 0}
+
+        def fake_init():
+            calls["init"] += 1
+
+        class FakeOgStorage:
+            def __init__(self, *args, **kwargs):
+                calls["upload"] += 1
+
+            def upload(self, *args, **kwargs):
+                return ("og-root", "og-tx")
+
+        monkeypatch.setattr("tradememory.db.initialize_zerog_runtime_env", fake_init, raising=False)
+        monkeypatch.setattr("tradememory.db.OgStorage", FakeOgStorage)
+
+        assert getattr(db, write_method)(make_data()) is True
+        assert calls == {"init": 0, "upload": 0}
+
+        results = getattr(db, query_method)()
+        assert len(results) == 1
+        assert results[0]["og_hash"] is None
+        assert results[0]["og_tx_hash"] is None
+
+    @pytest.mark.parametrize(
+        ("write_method", "query_method", "make_data", "memory_type"),
+        [
+            ("insert_episodic", "query_episodic", lambda: _make_episodic(id="E-020"), "episodic"),
+            (
+                "insert_semantic",
+                "query_semantic",
+                lambda: {
+                    "id": "S-020",
+                    "proposition": "VB works in trending markets",
+                    "alpha": 1.0,
+                    "beta": 1.0,
+                    "sample_size": 0,
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "regime": "trending_up",
+                    "volatility_regime": "high",
+                    "validity_conditions": {"atr_d1_min": 100.0},
+                    "last_confirmed": None,
+                    "last_contradicted": None,
+                    "source": "induced",
+                },
+                "semantic",
+            ),
+            (
+                "upsert_procedural",
+                "query_procedural",
+                lambda: {
+                    "id": "P-020",
+                    "strategy": "VolBreakout",
+                    "symbol": "XAUUSD",
+                    "behavior_type": "execution",
+                    "sample_size": 50,
+                    "avg_hold_winners": 3600.0,
+                    "avg_hold_losers": 7200.0,
+                    "disposition_ratio": 2.0,
+                    "actual_lot_mean": 0.05,
+                    "actual_lot_variance": 0.001,
+                    "kelly_fraction_suggested": 0.08,
+                    "lot_vs_kelly_ratio": 0.625,
+                },
+                "procedural",
+            ),
+        ],
+    )
+    def test_zerog_write_uses_runtime_env_when_enabled(
+        self, monkeypatch, db, write_method, query_method, make_data, memory_type
+    ):
+        monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://rpc.example")
+        monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc123")
+        monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer.example")
+
+        calls = {"init": 0, "upload": 0}
+
+        def fake_init():
+            calls["init"] += 1
+            monkeypatch.setenv("OG_ENABLED", "true")
+            monkeypatch.setenv("OG_PRIVATE_KEY", "0xabc123")
+            monkeypatch.setenv("OG_BLOCKCHAIN_RPC", "https://rpc.example")
+            monkeypatch.setenv("OG_INDEXER_RPC", "https://indexer.example")
+            return True
+
+        class FakeOgStorage:
+            def __init__(self, *args, **kwargs):
+                calls["upload"] += 1
+
+            def upload(self, payload, network="testnet"):
+                assert os.environ["OG_ENABLED"] == "true"
+                assert os.environ["OG_PRIVATE_KEY"] == "0xabc123"
+                assert os.environ["OG_BLOCKCHAIN_RPC"] == "https://rpc.example"
+                assert os.environ["OG_INDEXER_RPC"] == "https://indexer.example"
+                assert payload["type"] == memory_type
+                return (f"{memory_type}-og-root", f"{memory_type}-og-tx")
+
+        monkeypatch.setattr("tradememory.db.initialize_zerog_runtime_env", fake_init, raising=False)
+        monkeypatch.setattr("tradememory.db.OgStorage", FakeOgStorage)
+
+        assert getattr(db, write_method)(make_data()) is True
+        assert calls == {"init": 1, "upload": 1}
+
+        results = getattr(db, query_method)()
+        assert len(results) == 1
+        assert results[0]["og_hash"] == f"{memory_type}-og-root"
+        assert results[0]["og_tx_hash"] == f"{memory_type}-og-tx"
+
 
 # ========== Semantic Memory Tests ==========
 
-class TestSemanticMemory:
 
-    def _make_semantic(self, id="S-001", proposition="VB works in trending markets",
-                       strategy="VolBreakout", source="induced"):
+class TestSemanticMemory:
+    def _make_semantic(
+        self,
+        id="S-001",
+        proposition="VB works in trending markets",
+        strategy="VolBreakout",
+        source="induced",
+    ):
         return {
             "id": id,
             "proposition": proposition,
@@ -222,16 +396,17 @@ class TestSemanticMemory:
         results = db.query_semantic()
         r = results[0]
         assert r["confidence"] == pytest.approx(8.0 / 12.0)
-        expected_unc = (8.0 * 4.0) / (12.0 ** 2 * 13.0)
+        expected_unc = (8.0 * 4.0) / (12.0**2 * 13.0)
         assert r["uncertainty"] == pytest.approx(expected_unc)
 
 
 # ========== Procedural Memory Tests ==========
 
-class TestProceduralMemory:
 
-    def _make_procedural(self, id="P-001", strategy="VolBreakout",
-                         symbol="XAUUSD", behavior_type="execution"):
+class TestProceduralMemory:
+    def _make_procedural(
+        self, id="P-001", strategy="VolBreakout", symbol="XAUUSD", behavior_type="execution"
+    ):
         return {
             "id": id,
             "strategy": strategy,
@@ -294,8 +469,8 @@ class TestProceduralMemory:
 
 # ========== Affective State Tests ==========
 
-class TestAffectiveState:
 
+class TestAffectiveState:
     def test_init_and_load(self, db):
         assert db.init_affective(10000.0, 10000.0) is True
         state = db.load_affective()
@@ -335,18 +510,20 @@ class TestAffectiveState:
 
     def test_save_overwrites(self, db):
         db.init_affective(10000.0, 10000.0)
-        db.save_affective({
-            "confidence_level": 0.9,
-            "risk_appetite": 0.3,
-            "momentum_bias": -0.5,
-            "peak_equity": 12000.0,
-            "current_equity": 8000.0,
-            "drawdown_state": 0.5,
-            "max_acceptable_drawdown": 0.25,
-            "consecutive_wins": 0,
-            "consecutive_losses": 5,
-            "history_json": [],
-        })
+        db.save_affective(
+            {
+                "confidence_level": 0.9,
+                "risk_appetite": 0.3,
+                "momentum_bias": -0.5,
+                "peak_equity": 12000.0,
+                "current_equity": 8000.0,
+                "drawdown_state": 0.5,
+                "max_acceptable_drawdown": 0.25,
+                "consecutive_wins": 0,
+                "consecutive_losses": 5,
+                "history_json": [],
+            }
+        )
         state = db.load_affective()
         assert state["peak_equity"] == 12000.0
         assert state["consecutive_losses"] == 5
@@ -355,10 +532,11 @@ class TestAffectiveState:
 
 # ========== Prospective Memory Tests ==========
 
-class TestProspectiveMemory:
 
-    def _make_prospective(self, id="F-001", trigger_type="market_condition",
-                          action_type="skip_trade", status="active"):
+class TestProspectiveMemory:
+    def _make_prospective(
+        self, id="F-001", trigger_type="market_condition", action_type="skip_trade", status="active"
+    ):
         return {
             "id": id,
             "trigger_type": trigger_type,
@@ -405,10 +583,16 @@ class TestProspectiveMemory:
     def test_update_status_triggered(self, db):
         db.insert_prospective(self._make_prospective())
         now = datetime.now(timezone.utc).isoformat()
-        assert db.update_prospective_status(
-            "F-001", "triggered", triggered_at=now,
-            outcome_pnl_r=2.5, outcome_reflection="Avoided a bad trade"
-        ) is True
+        assert (
+            db.update_prospective_status(
+                "F-001",
+                "triggered",
+                triggered_at=now,
+                outcome_pnl_r=2.5,
+                outcome_reflection="Avoided a bad trade",
+            )
+            is True
+        )
         results = db.query_prospective(status="triggered")
         assert len(results) == 1
         r = results[0]
@@ -442,6 +626,7 @@ class TestProspectiveMemory:
 
 
 # ========== Cross-table: existing tables unaffected ==========
+
 
 class TestExistingTablesUnaffected:
     """Verify that creating OWM tables doesn't break existing L1/L2/L3 tables."""
