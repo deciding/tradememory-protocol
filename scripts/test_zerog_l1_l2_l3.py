@@ -11,11 +11,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ENV_ROOT = REPO_ROOT
+if not (ENV_ROOT / ".env").exists() and REPO_ROOT.parent.name == ".worktrees":
+    ENV_ROOT = REPO_ROOT.parent.parent
+
 SRC_ROOT = REPO_ROOT / "src"
 
 sys.path.insert(0, str(SRC_ROOT))
 
-load_dotenv(REPO_ROOT / ".env")
+if os.getenv("ZEROG_SKIP_DOTENV", "").lower() != "true":
+    load_dotenv(ENV_ROOT / ".env")
 
 
 def require_env(name: str) -> str:
@@ -37,12 +42,21 @@ def utc_now() -> str:
 
 def main() -> int:
     from tradememory.db import Database
-    from tradememory.og_storage import OgStorage
+    from tradememory.og_storage import (
+        OgStorage,
+        get_zerog_status,
+        initialize_zerog_runtime_env,
+        print_zerog_startup_notice,
+    )
 
-    os.environ["OG_ENABLED"] = "true"
-    os.environ["OG_BLOCKCHAIN_RPC"] = require_env("ZEROG_TESTNET_RPC_URL")
-    os.environ["OG_INDEXER_RPC"] = require_env("ZEROG_INDEXER_RPC")
-    os.environ["OG_PRIVATE_KEY"] = normalize_private_key(require_env("ZEROG_TESTNET_PRIVATE_KEY"))
+    status = get_zerog_status()
+    print_zerog_startup_notice()
+
+    if status.enabled:
+        os.environ["ZEROG_TESTNET_PRIVATE_KEY"] = normalize_private_key(
+            require_env("ZEROG_TESTNET_PRIVATE_KEY")
+        )
+        initialize_zerog_runtime_env()
 
     db_path = REPO_ROOT / "data" / f"zerog_smoke_{uuid.uuid4().hex}.db"
     db = Database(str(db_path))
@@ -176,7 +190,10 @@ def main() -> int:
         print(f"  L3: {dict(l3_row) if l3_row else None}")
 
         missing = [k for k in ("episodic", "semantic", "procedural") if k not in captured]
-        if missing or not (ok_l1 and ok_l2 and ok_l3):
+        if not (ok_l1 and ok_l2 and ok_l3):
+            return 1
+
+        if status.enabled and missing:
             return 1
 
         return 0

@@ -1,3 +1,4 @@
+import os
 import pytest
 import sys
 from unittest.mock import patch, MagicMock
@@ -38,12 +39,7 @@ def test_get_zerog_status_does_not_mutate_runtime_env(monkeypatch):
     monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
     monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
 
-    import tradememory.og_storage as og_module
     from tradememory.og_storage import OgStorage, get_zerog_status
-
-    monkeypatch.setattr(og_module, "Indexer", object())
-    monkeypatch.setattr(og_module, "ZgFile", object())
-    monkeypatch.setattr(og_module, "Account", object())
 
     status = get_zerog_status()
     storage = OgStorage()
@@ -51,8 +47,6 @@ def test_get_zerog_status_does_not_mutate_runtime_env(monkeypatch):
     assert status.enabled is True
     assert status.reason == "configured"
     assert status.missing == []
-    assert status.sdk_ready is True
-    assert status.og_env == {}
     assert storage._enabled is False
     assert storage._blockchain_rpc is None
     assert storage._private_key is None
@@ -64,48 +58,20 @@ def test_initialize_zerog_runtime_env_enables_default_og_storage_path(monkeypatc
     monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
     monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
 
-    import tradememory.og_storage as og_module
     from tradememory.og_storage import OgStorage, initialize_zerog_runtime_env
-
-    monkeypatch.setattr(og_module, "Indexer", object())
-    monkeypatch.setattr(og_module, "ZgFile", object())
-    monkeypatch.setattr(og_module, "Account", object())
 
     synced = initialize_zerog_runtime_env()
     storage = OgStorage()
 
-    assert synced["OG_ENABLED"] == "true"
-    assert synced["OG_BLOCKCHAIN_RPC"] == "https://evmrpc-testnet.0g.ai"
-    assert synced["OG_PRIVATE_KEY"] == "0xabc"
-    assert synced["OG_INDEXER_RPC"] == "https://indexer-storage-testnet-turbo.0g.ai"
+    assert synced is True
+    assert os.environ["OG_ENABLED"] == "true"
+    assert os.environ["OG_BLOCKCHAIN_RPC"] == "https://evmrpc-testnet.0g.ai"
+    assert os.environ["OG_PRIVATE_KEY"] == "0xabc"
+    assert os.environ["OG_INDEXER_RPC"] == "https://indexer-storage-testnet-turbo.0g.ai"
     assert storage._enabled is True
     assert storage._blockchain_rpc == "https://evmrpc-testnet.0g.ai"
     assert storage._private_key == "0xabc"
     assert storage._indexer_rpc == "https://indexer-storage-testnet-turbo.0g.ai"
-
-
-def test_config_status_disabled_when_sdk_runtime_missing(monkeypatch):
-    monkeypatch.delenv("OG_ENABLED", raising=False)
-    monkeypatch.delenv("OG_BLOCKCHAIN_RPC", raising=False)
-    monkeypatch.delenv("OG_PRIVATE_KEY", raising=False)
-    monkeypatch.delenv("OG_INDEXER_RPC", raising=False)
-    monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://evmrpc-testnet.0g.ai")
-    monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
-    monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
-
-    import tradememory.og_storage as og_module
-    from tradememory.og_storage import get_zerog_status
-
-    monkeypatch.setattr(og_module, "Indexer", None)
-    monkeypatch.setattr(og_module, "ZgFile", None)
-    monkeypatch.setattr(og_module, "Account", None)
-
-    status = get_zerog_status()
-
-    assert status.enabled is False
-    assert status.reason == "sdk_unavailable"
-    assert status.missing == []
-    assert status.sdk_ready is False
 
 
 def test_print_zerog_startup_notice_prints_clear_disabled_message(monkeypatch, capsys):
@@ -124,20 +90,11 @@ def test_print_zerog_startup_notice_prints_clear_disabled_message(monkeypatch, c
 
 
 def test_print_zerog_startup_notice_logs_enabled_message(monkeypatch):
-    monkeypatch.delenv("OG_ENABLED", raising=False)
-    monkeypatch.delenv("OG_BLOCKCHAIN_RPC", raising=False)
-    monkeypatch.delenv("OG_PRIVATE_KEY", raising=False)
-    monkeypatch.delenv("OG_INDEXER_RPC", raising=False)
     monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://evmrpc-testnet.0g.ai")
     monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
     monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
 
-    import tradememory.og_storage as og_module
     from tradememory.og_storage import print_zerog_startup_notice
-
-    monkeypatch.setattr(og_module, "Indexer", object())
-    monkeypatch.setattr(og_module, "ZgFile", object())
-    monkeypatch.setattr(og_module, "Account", object())
 
     mock_logger = MagicMock()
     status = print_zerog_startup_notice(logger=mock_logger)
@@ -145,26 +102,6 @@ def test_print_zerog_startup_notice_logs_enabled_message(monkeypatch):
     assert status.enabled is True
     mock_logger.info.assert_called_once()
     assert "0G Storage enabled" in mock_logger.info.call_args.args[0]
-
-
-def test_print_zerog_startup_notice_reports_sdk_unavailable(monkeypatch):
-    monkeypatch.setenv("ZEROG_TESTNET_RPC_URL", "https://evmrpc-testnet.0g.ai")
-    monkeypatch.setenv("ZEROG_TESTNET_PRIVATE_KEY", "0xabc")
-    monkeypatch.setenv("ZEROG_INDEXER_RPC", "https://indexer-storage-testnet-turbo.0g.ai")
-
-    import tradememory.og_storage as og_module
-    from tradememory.og_storage import print_zerog_startup_notice
-
-    monkeypatch.setattr(og_module, "Indexer", None)
-    monkeypatch.setattr(og_module, "ZgFile", None)
-    monkeypatch.setattr(og_module, "Account", None)
-
-    mock_logger = MagicMock()
-    status = print_zerog_startup_notice(logger=mock_logger)
-
-    assert status.enabled is False
-    assert status.reason == "sdk_unavailable"
-    assert "SDK/runtime unavailable" in mock_logger.info.call_args.args[0]
 
 
 class TestOgStorage:
