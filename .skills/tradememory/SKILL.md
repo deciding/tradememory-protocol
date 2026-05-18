@@ -17,6 +17,9 @@ metadata:
       env:
         ANTHROPIC_API_KEY: "Required for LLM reflections and Evolution Engine (optional, rule-based fallback without it)"
         TRADEMEMORY_API: "API endpoint, defaults to http://localhost:8000 (optional)"
+        ZEROG_TESTNET_RPC_URL: "Enables optional 0G dual-write when set with ZEROG_TESTNET_PRIVATE_KEY and ZEROG_INDEXER_RPC (otherwise SQLite-only)"
+        ZEROG_TESTNET_PRIVATE_KEY: "Required for optional 0G dual-write together with ZEROG_TESTNET_RPC_URL and ZEROG_INDEXER_RPC"
+        ZEROG_INDEXER_RPC: "Required for optional 0G dual-write together with ZEROG_TESTNET_RPC_URL and ZEROG_TESTNET_PRIVATE_KEY"
     os: ["linux", "darwin", "win32"]
     homepage: https://github.com/mnemox-ai/tradememory-protocol
 ---
@@ -180,6 +183,8 @@ Returns disposition ratio, hold time asymmetry, lot sizing variance vs Kelly cri
 
 **Environment variables:** All environment variables are optional. They are stored in your local `.env` file and never logged or sent to external services (except `ANTHROPIC_API_KEY` which authenticates with the Anthropic API).
 
+**Storage behavior:** SQLite is the default storage backend. Optional 0G dual-write is enabled only when `ZEROG_TESTNET_RPC_URL`, `ZEROG_TESTNET_PRIVATE_KEY`, and `ZEROG_INDEXER_RPC` are all set; otherwise TradeMemory falls back to SQLite-only storage and prints a startup notice.
+
 **File system access:** TradeMemory writes to a single SQLite database file (`tradememory.db`) in the project directory. No files are created or modified outside the project.
 
 **No implicit permissions:** This skill does not auto-install dependencies, modify system files, or require elevated privileges.
@@ -190,6 +195,9 @@ Returns disposition ratio, hold time asymmetry, lot sizing variance vs Kelly cri
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | No | Enables LLM reflections and Evolution Engine. Without it, reflections use rule-based analysis; Evolution is unavailable. |
 | `TRADEMEMORY_API` | No | REST API endpoint, defaults to `http://localhost:8000` |
+| `ZEROG_TESTNET_RPC_URL` | No | Enables optional 0G dual-write when set with `ZEROG_TESTNET_PRIVATE_KEY` and `ZEROG_INDEXER_RPC`; otherwise SQLite-only |
+| `ZEROG_TESTNET_PRIVATE_KEY` | No | Required for optional 0G dual-write together with `ZEROG_TESTNET_RPC_URL` and `ZEROG_INDEXER_RPC` |
+| `ZEROG_INDEXER_RPC` | No | Required for optional 0G dual-write together with `ZEROG_TESTNET_RPC_URL` and `ZEROG_TESTNET_PRIVATE_KEY` |
 
 ## Links
 

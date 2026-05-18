@@ -56,6 +56,12 @@ Or add to MCP config:
 }
 ```
 
+## Storage
+
+SQLite is the default storage backend. Optional 0G dual-write is enabled only when all three environment variables are set: `ZEROG_TESTNET_RPC_URL`, `ZEROG_TESTNET_PRIVATE_KEY`, and `ZEROG_INDEXER_RPC`.
+
+If any of those variables are unset, TradeMemory falls back to SQLite-only storage and prints a startup notice.
+
 ## What TradeMemory Records
 
 | Field | Description |
@@ -258,6 +264,7 @@ Check if any active plans match current market conditions.
 
 - **Never touches API keys.** TradeMemory does not execute trades, move funds, or access wallets.
 - **Read and record only.** The agent passes context; TradeMemory stores it.
+- **SQLite by default.** 0G dual-write is opt-in and requires `ZEROG_TESTNET_RPC_URL`, `ZEROG_TESTNET_PRIVATE_KEY`, and `ZEROG_INDEXER_RPC`; otherwise startup warns and uses SQLite only.
 - **No external network calls.** Server runs locally. No data sent to third parties.
 - **SHA-256 tamper detection.** Verify integrity at any time with `/audit/verify`.
 
