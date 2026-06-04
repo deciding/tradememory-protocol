@@ -28,11 +28,11 @@ metadata:
 
 Give your AI agent persistent trading memory. TradeMemory records every trade, recalls past decisions weighted by outcome quality, discovers behavioral patterns, and autonomously evolves new strategies from raw price data.
 
-**Outcome-Weighted Memory (OWM)** — 5 memory types (episodic, semantic, procedural, affective, prospective) that score recall by P&L outcome, context similarity, recency, and confidence. Winning trades surface first.
+**Outcome-Weighted Memory (OWM)** - 5 memory types (episodic, semantic, procedural, affective, prospective) that score recall by P&L outcome, context similarity, recency, and confidence. Winning trades surface first.
 
-**Evolution Engine** — LLM-powered strategy discovery. Feed it OHLCV data from any exchange, it generates candidate patterns, backtests them vectorized, validates out-of-sample, and graduates survivors. No manual rule writing.
+**Evolution Engine** - LLM-powered strategy discovery. Feed it OHLCV data from any exchange, it generates candidate patterns, backtests them vectorized, validates out-of-sample, and graduates survivors. No manual rule writing.
 
-**Platform-agnostic** — works with MT5, Binance, Alpaca, or any broker that outputs trade data. 1,233 tests passing. MIT licensed.
+**Platform-agnostic** - works with MT5, Binance, Alpaca, or any broker that outputs trade data. 1,233 tests passing. MIT licensed.
 
 ## Installation
 
@@ -96,7 +96,7 @@ python -m tradememory.server
 | Tool | Purpose |
 |------|---------|
 | `remember_trade` | Store a trade into all 5 OWM memory layers with automatic behavioral updates |
-| `recall_memories` | Outcome-weighted recall — scores memories by P&L, context similarity, recency, confidence |
+| `recall_memories` | Outcome-weighted recall - scores memories by P&L, context similarity, recency, confidence |
 | `get_behavioral_analysis` | Procedural memory stats: hold times, disposition ratio, lot variance, Kelly criterion |
 | `get_agent_state` | Current affective state: confidence level, drawdown %, win/loss streaks, risk appetite |
 | `create_trading_plan` | Create a prospective trading plan with entry/exit conditions and risk parameters |
@@ -107,8 +107,8 @@ python -m tradememory.server
 | Tool | Purpose |
 |------|---------|
 | `evolution_fetch_market_data` | Fetch OHLCV data from Binance for backtesting and pattern discovery |
-| `evolution_discover_patterns` | LLM-powered pattern discovery from price data — generates candidate trading rules |
-| `evolution_run_backtest` | Vectorized backtest of a candidate pattern — returns Sharpe, win rate, max drawdown |
+| `evolution_discover_patterns` | LLM-powered pattern discovery from price data - generates candidate trading rules |
+| `evolution_run_backtest` | Vectorized backtest of a candidate pattern - returns Sharpe, win rate, max drawdown |
 | `evolution_evolve_strategy` | Full evolution loop: generate → backtest → select → eliminate across generations |
 | `evolution_get_log` | Get log of past evolution runs with graduated strategies and graveyard |
 
@@ -133,7 +133,7 @@ Tell your agent these things in natural language.
 
 > "What trades have I taken in similar market conditions? Current context: ranging market, low volatility, Asian session."
 
-Returns memories ranked by outcome-weighted score — winning trades in similar contexts surface first.
+Returns memories ranked by outcome-weighted score - winning trades in similar contexts surface first.
 
 ### Check Performance
 
@@ -143,7 +143,7 @@ Returns memories ranked by outcome-weighted score — winning trades in similar 
 
 ### Behavioral Analysis
 
-> "Show my behavioral analysis — am I cutting winners short?"
+> "Show my behavioral analysis - am I cutting winners short?"
 
 Returns disposition ratio, hold time asymmetry, lot sizing variance vs Kelly criterion.
 
@@ -161,13 +161,13 @@ Returns disposition ratio, hold time asymmetry, lot sizing variance vs Kelly cri
 
 ### Evolution Engine
 
-> "Evolve a strategy for BTCUSDT on the 1h timeframe — 3 generations, 10 candidates each"
+> "Evolve a strategy for BTCUSDT on the 1h timeframe - 3 generations, 10 candidates each"
 
 > "Discover 5 trading patterns from ETHUSDT 4h data over the last 90 days"
 
 > "Backtest this pattern against BTCUSDT 1h data"
 
-> "Show me the evolution log — which strategies graduated?"
+> "Show me the evolution log - which strategies graduated?"
 
 ### AI Reflection
 
@@ -175,11 +175,61 @@ Returns disposition ratio, hold time asymmetry, lot sizing variance vs Kelly cri
 
 > "What patterns have you found in my London session trades?"
 
+### L2/L3 Memory Persistence (OpenClaw)
+
+OpenClaw indexes all conversation text as memory. To ensure L2 (patterns) and L3 (strategy/adjustments) data persists between sessions, echo structured results from these MCP tools as fenced code blocks. The ``` fences keep each record intact during chunking.
+
+**Every time you call one of these tools, wrap the L2/L3 portion of the response in a code block immediately after receiving it.**
+
+**`evolution_discover_patterns`** - echo each discovered pattern:
+
+```yaml
+# L2 Pattern - MomentumBreakout
+confidence: 0.82
+conditions: price > MA20 and RSI > 55
+entry_logic: long on crossover
+exit_logic: trailing stop 2 ATR
+backtest_hint: sharpe_1.45_win_62pct
+```
+
+**`evolution_evolve_strategy`** - echo graduated strategies and fitness:
+
+```yaml
+# L2 Strategy - graduated
+name: TrendFollow_v3
+fitness:
+  sharpe: 1.52
+  win_rate: 0.58
+  max_dd: 0.12
+  trade_count: 47
+status: OOS_PASS
+```
+
+**`recall_memories`** - echo the top ranked memories:
+
+```yaml
+# L2 Recall - XAUUSD ranging
+rank_1: {memory_id: "...", score: 0.89, type: episodic, pnl: 150, context: "London session"}
+rank_2: {memory_id: "...", score: 0.76, type: semantic, proposition: "VolBreakout performs in ranging"}
+```
+
+**`get_behavioral_analysis`** / **`get_agent_state`** - echo the latest L3 state:
+
+```yaml
+# L3 Behavioral - VolBreakout.XAUUSD
+hold_winners: 4.2h
+hold_losers: 2.1h
+disposition_ratio: 0.67
+kelly_fraction: 0.15
+```
+
+When retrieving historical data (performance, plans, log), no echo needed - only echo on calls that produce *new* L2/L3 data.
+
 ## Security & Permissions
 
 **Network access during install:** `pip install` downloads from PyPI. Standard Python package installation.
 
-**Network access at runtime:** The MCP server runs on stdio by default — no network access. The REST server runs on `localhost:8000` and does not make outbound requests. If `ANTHROPIC_API_KEY` is set, the reflection engine and Evolution Engine send data to the Claude API. Evolution Engine fetches OHLCV data from the Binance public API.
+**Network access at runtime:** The MCP server runs on stdio by default - no network access. The REST server runs on `localhost:8000` and does not make outbound requests. If `ANTHROPIC_API_KEY` is set, the reflection engine and Evolution Engine send data to the Claude API. Evolution Engine fetches OHLCV data from the Binance public API.
 
 **Environment variables:** All environment variables are optional. They are stored in your local `.env` file and never logged or sent to external services (except `ANTHROPIC_API_KEY` which authenticates with the Anthropic API).
 

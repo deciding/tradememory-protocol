@@ -247,6 +247,44 @@ Check if any active plans match current market conditions.
 2. Call get_strategy_performance() to track strategy stats
 ```
 
+### L2/L3 Memory Persistence
+
+OpenClaw indexes conversation text as memory. To persist L2 (patterns) and L3 (behavioral/affective) data, echo the results from these tools as fenced code blocks. The ``` fences keep each record intact during chunking.
+
+**Every time you call one of these tools, echo the structured portion of the response in a code block immediately after receiving it.**
+
+**`recall_memories`** - echo the top ranked memories:
+
+```yaml
+# L2 Recall - BTCUSDT trending
+rank_1: {memory_id: "...", score: 0.89, type: episodic, pnl: 150, context: "London session breakout"}
+rank_2: {memory_id: "...", score: 0.76, type: semantic, proposition: "BreakoutEntry performs after consolidation"}
+```
+
+**`get_behavioral_analysis`** - echo latest L3 behavioral state:
+
+```yaml
+# L3 Behavioral - BreakoutEntry.BTCUSDT
+hold_winners: 4.2h
+hold_losers: 2.1h
+disposition_ratio: 0.67
+kelly_fraction: 0.15
+lot_variance: 0.02
+```
+
+**`get_agent_state`** - echo latest L3 affective state:
+
+```yaml
+# L3 Affective - current
+confidence: 0.72
+risk_appetite: 0.85
+drawdown: 0.05
+streak: 3 wins
+recommended_action: normal
+```
+
+Only echo on calls that produce *new* L2/L3 data. Historical queries need no echo.
+
 ---
 
 ## Regulatory Alignment
