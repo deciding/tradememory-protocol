@@ -33,7 +33,7 @@ TradeMemory is the compliance layer. When your AI agent opens a position, TradeM
 ## Installation
 
 ```bash
-pipx install tradememory-protocol
+pipx install git+https://github.com/deciding/tradememory-protocol.git
 ```
 
 Start the server:
